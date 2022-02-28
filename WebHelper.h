@@ -19,41 +19,12 @@
  *
  * ***********************************************************************/
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef WEBHELPER_H
+#define WEBHELPER_H
 
-#include "Arduino.h"
+#include "RemoteRelay.h"
 
-#define BUF_LEN 180           // Max length of each line of log
-#define RINGLOG_SIZE 100      // Max number of line in the ring log
+bool isAuthBasicOK();
+void setup_web_handlers(size_t channel_count);
 
-/**
- * This class provide a logging facility to print log messages on the 
- * serial output and store the last ones in a ring buffer for further access.
- */
-class Logger
-{
-  private:
-  
-    char ringlog[RINGLOG_SIZE][BUF_LEN];
-    int index;
-    bool enableDebug;
-    bool enableSerial;
-    
-  public:
-  
-    Logger();
-    
-    void info(const char *, ...);     // Print and store message log
-    void debug(const char *, ...);    // Print and store message log if debug mode is enabled
-    void setDebug(bool);              // Enable debug mode
-    void setSerial(bool);             // Enable log output on serial port
-    String getLog(void);              // Return the current log
-  
-  private:
-  
-    void log(const char *, va_list);
-    
-};
-
-#endif  // LOGGER_H
+#endif  // WEBHELPER_H

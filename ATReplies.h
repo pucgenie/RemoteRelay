@@ -19,41 +19,22 @@
  *
  * ***********************************************************************/
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef ATREPLIES_H
+#define ATREPLIES_H
 
 #include "Arduino.h"
+#include "Logger.h"
 
-#define BUF_LEN 180           // Max length of each line of log
-#define RINGLOG_SIZE 100      // Max number of line in the ring log
-
-/**
- * This class provide a logging facility to print log messages on the 
- * serial output and store the last ones in a ring buffer for further access.
- */
-class Logger
-{
+// TODO: pucgenie: Handle the exact commands.
+class ATReplies {
   private:
-  
-    char ringlog[RINGLOG_SIZE][BUF_LEN];
-    int index;
-    bool enableDebug;
-    bool enableSerial;
+    int mode;
     
   public:
-  
-    Logger();
+    ATReplies();
     
-    void info(const char *, ...);     // Print and store message log
-    void debug(const char *, ...);    // Print and store message log if debug mode is enabled
-    void setDebug(bool);              // Enable debug mode
-    void setSerial(bool);             // Enable log output on serial port
-    String getLog(void);              // Return the current log
-  
-  private:
-  
-    void log(const char *, va_list);
+    void handle_nuvoTon_comms(Logger &logger);
     
 };
 
-#endif  // LOGGER_H
+#endif  // ATREPLIES_H

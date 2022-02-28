@@ -2,6 +2,7 @@
  *
  * This file is part of the Remoterelay Arduino sketch.
  * Copyleft 2017 Nicolas Agius <nicolas.agius@lps-it.fr>
+ * Copyleft 2022 Johannes Unger (just minor enhancements)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,47 +21,42 @@
 
 #include "Logger.h"
 
-Logger::Logger()
-{
+Logger::Logger() {
   // Init ring log
-  for (int i=0; i<RINGLOG_SIZE; i++)
+  for (int i = RINGLOG_SIZE; i --> 0; ) {
     ringlog[i][0]='\0';
+  }
 
   enableDebug = false;
   enableSerial = false;
 }
 
-void Logger::setDebug(bool d)
-{
+void Logger::setDebug(bool d) {
   enableDebug = d;
 }
 
-void Logger::setSerial(bool d)
-{
+void Logger::setSerial(bool d) {
   enableSerial = d;
 }
 
-void Logger::debug(const char *fmt, ...)
-{
-  if(enableDebug)
-  {
-    va_list ap;
-    va_start(ap, fmt);
-    log(fmt, ap);
-    va_end(ap);
+void Logger::debug(const char *fmt, ...) {
+  if (!enableDebug) {
+return;
   }
-}
-
-void Logger::info(const char *fmt, ...)
-{
   va_list ap;
   va_start(ap, fmt);
   log(fmt, ap);
   va_end(ap);
 }
 
-void Logger::log(const char *fmt, va_list ap)
-{
+void Logger::info(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  log(fmt, ap);
+  va_end(ap);
+}
+
+void Logger::log(const char *fmt, va_list ap) {
   char buffer[BUF_LEN];
 
   // Generate log message (does not support float)
@@ -70,8 +66,9 @@ void Logger::log(const char *fmt, va_list ap)
   uint32_t uptime = millis();
   snprintf(ringlog[index], BUF_LEN, "[%d.%03d] %s", uptime / 1000, uptime % 1000, buffer);
 
-  if(enableSerial)
+  if (enableSerial) {
     Serial.println(ringlog[index]);
+  }
 
   // Loop over at the begining of the ring
   if (++index >= RINGLOG_SIZE)
