@@ -26,15 +26,17 @@
 
 #include "divideandconquer.h"
 
+// pucgenie: Don't use F() here
 static const String WebParam[] = {
     "debug"
   , "login"
   , "password"
   , "serial"
-  , "web_on_boot"
+  , "webservice"
 };
 
 // pucgenie: We need the memory in any case because there is no path tree parser...
+// pucgenie: Don't use F() here.
 static const char *channelPath[] = {
     "/channel/1"
   , "/channel/2"
@@ -149,20 +151,20 @@ return;
   // Save changes
   if (isNew.debug) {
     logger.setDebug(settings.debug);
-    logger.info("Updated debug to %.5s.", bool2str(settings.debug));
+    logger.info(F("Updated debug to %.5s."), bool2str(settings.debug));
   }
 
   if (isNew.serial) {
     logger.setSerial(settings.serial);
-    logger.info("Updated serial to %.5s.", bool2str(settings.serial));
+    logger.info(F("Updated serial to %.5s."), bool2str(settings.serial));
   }
 
   if (isNew.login) {
-    logger.info("Updated login to \"%s\".", settings.login);
+    logger.info(F("Updated login to \"%s\"."), settings.login);
   }
 
   if (isNew.password) {
-    logger.info("Updated password.");
+    logger.info(F("Updated password."));
   }
 
   saveSettings(settings);
@@ -180,7 +182,7 @@ void handlePOSTReset() {
 return;
   }
   
-  logger.info("Reset settings to default");
+  logger.info(F("Reset settings to default"));
 
   resetWiFiManager();
   setDefaultSettings(settings);
@@ -190,7 +192,7 @@ return;
   server.send(200, F("text/plain"), F("Reset OK"));
   
   delay(3000);
-  logger.info("Restarting...");
+  logger.info(F("Restarting..."));
   
   ESP.restart();
 }
@@ -244,6 +246,7 @@ return;
 }
 
 void setup_web_handlers(size_t channel_count) {
+  // pucgenie: Don't use F() for map keys.
   server.on("/", handleGETRoot );
   server.on("/debug", HTTP_GET, handleGETDebug);
   server.on("/settings", HTTP_GET, handleGETSettings);
@@ -257,6 +260,6 @@ void setup_web_handlers(size_t channel_count) {
   }
   
   server.onNotFound([]() {
-    server.send(404, "text/plain", "Not found\r\n");
+    server.send(404, F("text/plain"), F("Not found\r\n"));
   });
 }

@@ -39,31 +39,36 @@ void Logger::setSerial(bool d) {
   enableSerial = d;
 }
 
-void Logger::debug(const char *fmt, ...) {
+void Logger::debug(const __FlashStringHelper* fmt, ...) {
   if (!enableDebug) {
 return;
   }
   va_list ap;
   va_start(ap, fmt);
-  log(fmt, ap);
+  this->log(fmt, ap);
   va_end(ap);
 }
 
-void Logger::info(const char *fmt, ...) {
+void Logger::info(const __FlashStringHelper* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  log(fmt, ap);
+  this->log(fmt, ap);
   va_end(ap);
 }
 
-void Logger::log(const char *fmt, va_list ap) {
+void Logger::log(const __FlashStringHelper* fmt, va_list ap) {
   char buffer[BUF_LEN];
 
   // Generate log message (does not support float)
-  vsnprintf(buffer, BUF_LEN, fmt, ap);
+  vsnprintf(buffer, BUF_LEN, 
+    String(
+      fmt
+    ).c_str()
+    , ap);
 
   // Add timestamp header
   uint32_t uptime = millis();
+  // pucgenie: don't use F() here.
   snprintf(ringlog[index], BUF_LEN, "[%d.%03d] %s", uptime / 1000, uptime % 1000, buffer);
 
   if (enableSerial) {
@@ -82,6 +87,7 @@ String Logger::getLog()
   int sec = millis() / 1000;
   int min = sec / 60;
   int hour = min / 60;
+  // pucgenie: Don't use F() here.
   snprintf(uptime, sizeof(uptime), "%02d:%02d:%02d", hour, min % 60, sec % 60);
 
   // Generate header

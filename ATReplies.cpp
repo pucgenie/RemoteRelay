@@ -72,7 +72,7 @@ void ATReplies::handle_nuvoTon_comms(Logger &logger) {
   Serial.flush(); // flush what's left '\n'?
 
   if (charnonempty(stringIn)) {
-    logger.debug("Serial received: %s", stringIn);
+    logger.debug(F("Serial received: %s"), stringIn);
 
     if (stringIn.indexOf("AT+") > -1) {
       Serial.println("OK");
@@ -81,7 +81,7 @@ void ATReplies::handle_nuvoTon_comms(Logger &logger) {
     if (stringIn.indexOf("AT+RST") > -1) {
       // pretend we reset (wait a bit then send the WiFi connected message)
       delay(1);
-      Serial.println("WIFI CONNECTED\r\nWIFI GOT IP");
+      Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
     }
 
     // Button2: AT+RESTORE und komplette Initialisierung

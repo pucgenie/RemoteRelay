@@ -60,7 +60,6 @@ struct ST_SETTINGS {
   char login[AUTHBASIC_LEN_USERNAME];
   char password[AUTHBASIC_LEN_PASSWORD];
   char ssid[32+1];
-  char passphrase[64+1];
 };
 
 struct ST_SETTINGS_FLAGS {

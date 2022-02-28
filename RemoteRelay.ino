@@ -108,26 +108,27 @@ int loadSettings(struct ST_SETTINGS &p_settings) {
 
   // Check CRC
   if (crc8(_buffer, sizeof(struct ST_SETTINGS)) != uint8_t(EEPROM.read(sizeof(struct ST_SETTINGS)))) {
-    logger.info("Bad CRC, loading default settings...");
+    logger.info(F("Bad CRC, loading default settings..."));
     setDefaultSettings(p_settings);
     return 0;
   }
   logger.setDebug(p_settings.debug);
   logger.setSerial(p_settings.serial);
-  logger.info("Loaded settings from flash");
+  logger.info(F("Loaded settings from flash"));
 
   // Display loaded setting on debug
   getJSONSettings(buffer, BUF_SIZE);
-  logger.debug("FLASH: %s", buffer);
+  logger.debug(F("FLASH: %s"), buffer);
   return 1;
 }
 
 void setDefaultSettings(struct ST_SETTINGS& p_settings) {
-    strcpy(p_settings.login, DEFAULT_LOGIN);
-    strcpy(p_settings.password, DEFAULT_PASSWORD);
-    p_settings.debug = false;
-    p_settings.serial = false;
-    led_scream(0b10101010);
+  String(F(DEFAULT_LOGIN)).toCharArray(p_settings.login, AUTHBASIC_LEN_USERNAME-1);
+  String(F(DEFAULT_PASSWORD)).toCharArray(p_settings.password, AUTHBASIC_LEN_PASSWORD-1);
+  String(F("RemoteRelay")).toCharArray(p_settings.ssid, 64);
+  p_settings.debug = false;
+  p_settings.serial = false;
+  led_scream(0b10101010);
 }
 
 
@@ -155,8 +156,8 @@ void setChannel(uint8_t channel, uint8_t mode) {
   // Save status 
   channels[channel - 1] = mode;
   
-  logger.info("Channel %.1i switched to %.3s", channel, (mode == MODE_ON) ? "on" : "off");
-  logger.debug("Sending payload %02X%02X%02X%02X", payload[0], payload[1], payload[2], payload[3]);
+  logger.info(F("Channel %.1i switched to %.3s"), channel, (mode == MODE_ON) ? "on" : "off");
+  logger.debug(F("Sending payload %02X%02X%02X%02X"), payload[0], payload[1], payload[2], payload[3]);
   
   // Give some time to the watchdog
   ESP.wdtFeed();
@@ -172,8 +173,8 @@ void setChannel(uint8_t channel, uint8_t mode) {
 
 void getJSONSettings(char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  snprintf(p_buffer, bufSize, R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s}
-)=="=="
+  snprintf(p_buffer, bufSize, String(F(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s}
+)=="==")).c_str()
     , settings.login
     , bool2str(settings.debug)
     , bool2str(settings.serial)
@@ -182,8 +183,8 @@ void getJSONSettings(char p_buffer[], size_t bufSize) {
 
 char* getJSONState(uint8_t channel) {
   //Generate JSON 
-  snprintf(buffer, BUF_SIZE, R"=="==({"channel":%.1i,"mode":"%.3s"}
-)=="=="
+  snprintf(buffer, BUF_SIZE, String(F(R"=="==({"channel":%.1i,"mode":"%.3s"}
+)=="==")).c_str()
     , channel
     , (channels[channel - 1] == MODE_ON) ? "on" : "off"
   );
@@ -196,7 +197,7 @@ void setup()  {
   
   Serial.begin(115200);
   EEPROM.begin(512);
-  logger.info("RemoteRelay version %s started.", VERSION);
+  logger.info(F("RemoteRelay version %s started."), VERSION);
   
   // Load settigns from flash
   if (!loadSettings(settings)) {
@@ -215,31 +216,34 @@ void setup()  {
   // Configure custom parameters
   WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
   WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
+  WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, 64);
   wifiManager.setSaveConfigCallback([](){
     shouldSaveConfig = true;
   });
   wifiManager.addParameter(&http_login);
   wifiManager.addParameter(&http_password);
+  wifiManager.addParameter(&http_ssid);
   
   // Connect to Wifi or ask for SSID
-  wifiManager.autoConnect("RemoteRelay");
+  wifiManager.autoConnect(settings.ssid);
 
   // Save new configuration set by captive portal
   if (shouldSaveConfig) {
     strncpy(settings.login, http_login.getValue(), AUTHBASIC_LEN_USERNAME);
     strncpy(settings.password, http_password.getValue(), AUTHBASIC_LEN_PASSWORD);
+    strncpy(settings.ssid, http_ssid.getValue(), 64);
 
-    logger.info("Saving new config from portal web page");
+    logger.info(F("Saving new config from portal web page"));
     saveSettings(settings);
   }
 
   // Display local ip
-  logger.info("Connected. IP address: %s", WiFi.localIP().toString().c_str());
+  logger.info(F("Connected. IP address: %s"), WiFi.localIP().toString().c_str());
   
   setup_web_handlers(sizeof(channels));
   server.begin();
   
-  logger.info("HTTP server started.");
+  logger.info(F("HTTP server started."));
 }
 
 void resetWiFiManager() {
