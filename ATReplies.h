@@ -28,12 +28,10 @@
 // TODO: pucgenie: Handle the exact commands.
 class ATReplies {
   private:
-    int mode;
+    static int cwmode;
     
   public:
-    ATReplies();
-    
-    void handle_nuvoTon_comms(Logger &logger);
+    static void handle_nuvoTon_comms(Logger &logger);
     
 };
 

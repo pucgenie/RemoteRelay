@@ -21,6 +21,8 @@
 
 #include "Logger.h"
 
+static char buffer[BUF_LEN];
+
 Logger::Logger() {
   // Init ring log
   for (int i = RINGLOG_SIZE; i --> 0; ) {
@@ -39,49 +41,43 @@ void Logger::setSerial(bool d) {
   enableSerial = d;
 }
 
-void Logger::debug(const __FlashStringHelper* fmt, ...) {
+void Logger::debug(PGM_P fmt, ...) {
   if (!enableDebug) {
 return;
   }
   va_list ap;
   va_start(ap, fmt);
-  this->log(fmt, ap);
+  log(fmt, ap);
   va_end(ap);
 }
 
-void Logger::info(const __FlashStringHelper* fmt, ...) {
+void Logger::info(PGM_P fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  this->log(fmt, ap);
+  log(fmt, ap);
   va_end(ap);
 }
 
-void Logger::log(const __FlashStringHelper* fmt, va_list ap) {
-  char buffer[BUF_LEN];
-
+void Logger::log(PGM_P fmt, va_list ap) {
   // Generate log message (does not support float)
-  vsnprintf(buffer, BUF_LEN, 
-    String(
-      fmt
-    ).c_str()
-    , ap);
+  vsnprintf_P(buffer, BUF_LEN, fmt, ap);
 
   // Add timestamp header
   uint32_t uptime = millis();
   // pucgenie: don't use F() here.
-  snprintf(ringlog[index], BUF_LEN, "[%d.%03d] %s", uptime / 1000, uptime % 1000, buffer);
+  snprintf(ringlog[index], BUF_LEN, "[%04d.%03d] %s", uptime / 1000, uptime % 1000, buffer);
 
   if (enableSerial) {
     Serial.println(ringlog[index]);
   }
 
   // Loop over at the begining of the ring
-  if (++index >= RINGLOG_SIZE)
-    index=0;
+  if (++index >= RINGLOG_SIZE) {
+    index = 0;
+  }
 }
   
-String Logger::getLog()
-{
+String Logger::getLog() {
   // Get uptime
   char uptime[9];
   int sec = millis() / 1000;
@@ -105,20 +101,16 @@ String Logger::getLog()
   msg += " lines of the log:\r\n";
 
   // Get most recent half of the ring
-  for(int i=index; i<RINGLOG_SIZE; i++)
-  {
-    if(strlen(ringlog[i]) > 0)
-    {
+  for (int i = index; i < RINGLOG_SIZE; ++i) {
+    if (strlen(ringlog[i]) > 0) {
       msg += ringlog[i];
       msg += "\r\n";
     }
   }
 
   // Get older half of the ring
-  for(int i=0; i<index; i++)
-  {
-    if(strlen(ringlog[i]) > 0)
-    {
+  for (int i = 0; i < index; ++i) {
+    if (strlen(ringlog[i]) > 0) {
       msg += ringlog[i];
       msg += "\r\n";
     }
@@ -126,8 +118,9 @@ String Logger::getLog()
 
   msg += " ==== END LOG ====\r\n";
 
-  if(enableSerial)
+  if (enableSerial) {
     Serial.print(msg);
+  }
 
   return msg;
 }

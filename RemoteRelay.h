@@ -24,42 +24,58 @@
 
 #include "Logger.h"
 
+#include <DNSServer.h>
+#include <WiFiManager.h>         // See https://github.com/tzapu/WiFiManager for documentation
+#include <strings_en.h>
+
 // Default value
 #define DEFAULT_LOGIN "sxabc"        // AuthBasic credentials
 #define DEFAULT_PASSWORD "MtsssezPzg"
 
 #define FOUR_WAY_MODE           // Enable channels 3 and 4 (comment out to disable)
 
-#define NUVOTON_AT_REPLIES      // https://github.com/nagius/RemoteRelay/issues/4 (comment out to disable)
-#ifdef NUVOTON_AT_REPLIES
+//#define DISABLE NUVOTON_AT_REPLIES      // https://github.com/nagius/RemoteRelay/issues/4 (uncomment to disable feature)
+#ifndef DISABLE_NUVOTON_AT_REPLIES
 #include "ATReplies.h"
 #endif
 
 // Internal constant
 #define AUTHBASIC_LEN_USERNAME 20+1        // Login or password 20 char max
 #define AUTHBASIC_LEN_PASSWORD 20+1        // Login or password 20 char max
-#define VERSION "1.3"
+#define VERSION "2.0"
 
 #define MODE_ON 1               // See LC-Relay board datasheet for open/close values
 #define MODE_OFF 0
 
-// 512 bytes available.
+// 512 bytes available (EEPROM.begin).
 struct ST_SETTINGS {
-  bool debug;
-  bool serial;
-  /**
-   * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled without NUVOTON_AT_REPLIES:
-     AT+CIPMUX=1
-     AT+CIPSERVER=1,8080
-     AT+CIPSTO=360
-   *
-   * If not set, µC may sleep between ping pong intervals.
-   * If switch 1 is pressed/hold during boot, 
-   */
-  bool webservice;
-  char login[AUTHBASIC_LEN_USERNAME];
-  char password[AUTHBASIC_LEN_PASSWORD];
-  char ssid[32+1];
+  public:
+    union {
+      struct {
+        /**
+         * Count the number of zeroes to rush along the linked list.
+         * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
+         */
+        uint8_t wearlevel_mark :2;
+        uint8_t debug          :1;
+        uint8_t serial         :1;
+        /**
+         * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
+           AT+CIPMUX=1
+           AT+CIPSERVER=1,8080
+           AT+CIPSTO=360
+         *
+         * If not set, µC may sleep between ping pong intervals.
+         * If switch 1 is pressed/hold during boot, 
+         */
+        uint8_t webservice     :1;
+      };
+      // each member needs to have the same type that the full bitfield has
+      uint8_t reg;
+    } flags;
+    char login[AUTHBASIC_LEN_USERNAME];
+    char password[AUTHBASIC_LEN_PASSWORD];
+    char ssid[32+1];
 };
 
 struct ST_SETTINGS_FLAGS {
@@ -69,24 +85,56 @@ struct ST_SETTINGS_FLAGS {
   bool password;
 };
 
-#include <ESP8266WebServer.h>
+enum MyLoopState {
+  // first loop call
+  AFTER_SETUP,
+  // config mode, full webservices for testing
+  AP_MODE,
+  // no webservices
+  STA_LITE,
+  // normal operation
+  STA_WEB,
+  // fallback operation, autoConnect
+  AUTO_MODE,
+  // delayed shutdown
+  SHUTDOWN_REQUESTED,
+  // shutdown now
+  SHUTDOWN_HALT,
+  // write all 1s to used EEPROM flash page. If it was bitwise EEPROM, would have just stored an invalid CRC value instead.
+  ERASE_EEPROM,
+  // write a zero anywhere in CRC to force loading default settings at boot
+  EEPROM_DESTROY_CRC,
+  // save settings to EEPROM flash
+  SAVE_SETTINGS,
+  // AT+RESTORE received
+  RESTORE,
+  // AT+RST received (when switching AT+CWMODE. nuvoTon tries up to 3 times about every 28 seconds)
+  RESET,
+  // wants AP_MODE
+  AP_REQUESTED,
+  // wants STA_{LITE|WEB}
+  STA_REQUESTED,
+  // nuvoTon sends the same commands regardless of CWMODE (but CWMODE=1 waits for "WIFI GOT IP" to be received by nuvoTon)
+  WEB_REQUESTED,
+};
 
-#define BUF_SIZE 256            // Used for string buffers
+#define BUF_SIZE 384            // Used for string buffers
 extern char buffer[];             // Global char* to avoid multiple String concatenation which causes RAM fragmentation
 
 // Global variables
-extern ESP8266WebServer server;
+//extern ESP8266WebServer server;
 extern Logger logger;
 extern struct ST_SETTINGS settings;
 extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
+extern MyLoopState myLoopState;
+extern WiFiManager wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
-void resetWiFiManager();
 void saveSettings(struct ST_SETTINGS &p_settings);
 // Doesn't need to be visible yet.
-//int loadSettings(struct ST_SETTINGS &p_settings);
+//bool loadSettings(struct ST_SETTINGS &p_settings);
 void setDefaultSettings(struct ST_SETTINGS& p_settings);
 void getJSONSettings(char buffer[], size_t bufSize);
-char* getJSONState(uint8_t channel);
+void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize);
 
 #endif  // REMOTERELAY_H

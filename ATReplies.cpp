@@ -63,16 +63,13 @@
  * Then continues exactly like CWMODE=2 (and changes to red led)
  * 
  */
-ATReplies::ATReplies() {
-  
-}
 
 void ATReplies::handle_nuvoTon_comms(Logger &logger) {
   String stringIn = Serial.readStringUntil('\r');
   Serial.flush(); // flush what's left '\n'?
 
   if (charnonempty(stringIn)) {
-    logger.debug(F("Serial received: %s"), stringIn);
+    logger.debug(PSTR("Serial received: %s"), stringIn);
 
     if (stringIn.indexOf("AT+") > -1) {
       Serial.println("OK");
@@ -80,7 +77,7 @@ void ATReplies::handle_nuvoTon_comms(Logger &logger) {
 
     if (stringIn.indexOf("AT+RST") > -1) {
       // pretend we reset (wait a bit then send the WiFi connected message)
-      delay(1);
+      delay(10);
       Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
     }
 

@@ -43,15 +43,15 @@ class Logger {
   
     Logger();
     
-    void info(const __FlashStringHelper*, ...);     // Print and store message log
-    void debug(const __FlashStringHelper*, ...);    // Print and store message log if debug mode is enabled
-    void setDebug(bool);              // Enable debug mode
+    void info(PGM_P, ...);     // Print and store message log
+    void debug(PGM_P, ...);    // Print and store message log if debug mode is enabled
     void setSerial(bool);             // Enable log output on serial port
+    void setDebug(bool);              // Enable debug log output
     String getLog(void);              // Return the current log
   
   private:
   
-    void log(const __FlashStringHelper*, va_list);
+    void log(PGM_P, va_list);
     
 };
 

@@ -20,13 +20,10 @@
  * ***********************************************************************/
 
 // hardcoded pinging of 8.8.8.8 to save space and config overhead
+// AT+RESTORE could change from AUTO_MODE to AP_REQUESTED
 
 // board manager: "Generic ESP8266 Board" https://randomnerdtutorials.com/how-to-install-esp8266-board-arduino-ide/
 // preferences additional: https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
-#include <ESP8266WiFi.h>
-#include <DNSServer.h>
-#include <WiFiManager.h>         // See https://github.com/tzapu/WiFiManager for documentation
-//#include <strings_en.h>
 
 #include <EEPROM.h>
 
@@ -38,12 +35,16 @@ char buffer[BUF_SIZE];
 
 #include "syntacticsugar.h"
 
-ESP8266WebServer server(80);
-Logger logger = Logger();
-struct ST_SETTINGS settings;
-bool shouldSaveConfig = false;
+//ESP8266WebServer server(80);
+// contained in WiFiManager.server->
 
-#ifdef NUVOTON_AT_REPLIES
+struct ST_SETTINGS settings;
+Logger logger = Logger();
+bool shouldSaveConfig = false;
+MyLoopState myLoopState = AFTER_SETUP;
+WiFiManager wifiManager;
+
+#ifndef DISABLE_NUVOTON_AT_REPLIES
 static ATReplies atreplies = ATReplies();
 #endif
 
@@ -84,7 +85,7 @@ uint8_t crc8(const uint8_t *addr, uint8_t len) {
 void saveSettings(struct ST_SETTINGS &p_settings) {
   // Use the last byte for CRC
   uint8_t theCRC = crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS));
-  
+  // TODO: make use of wearlevel_mark, shift save position
   EEPROM.put(0, p_settings);
   /*
   for (int i = sizeof(buffer); i --> 0; ) {
@@ -95,11 +96,11 @@ void saveSettings(struct ST_SETTINGS &p_settings) {
   EEPROM.commit();
 }
 
-int loadSettings(struct ST_SETTINGS &p_settings) {
-  uint8_t const *_buffer = (uint8_t*) &p_settings;
+bool loadSettings(struct ST_SETTINGS &p_settings) {
   // Use the last byte for CRC
   
   EEPROM.get(0, p_settings);
+  uint8_t const *_buffer = (uint8_t*) &p_settings;
   /*
   for (int i = sizeof(struct ST_SETTINGS); i --> 0; ) {
     _buffer[i] = uint8_t(EEPROM.read(i));
@@ -107,30 +108,31 @@ int loadSettings(struct ST_SETTINGS &p_settings) {
   */
 
   // Check CRC
-  if (crc8(_buffer, sizeof(struct ST_SETTINGS)) != uint8_t(EEPROM.read(sizeof(struct ST_SETTINGS)))) {
-    logger.info(F("Bad CRC, loading default settings..."));
+  bool validCRC = (crc8(_buffer, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(sizeof(struct ST_SETTINGS))));
+  if (!validCRC) {
+    logger.info(PSTR("Bad CRC, loading default settings..."));
     setDefaultSettings(p_settings);
-    return 0;
   }
-  logger.setDebug(p_settings.debug);
-  logger.setSerial(p_settings.serial);
-  logger.info(F("Loaded settings from flash"));
+  logger.setSerial(p_settings.flags.serial);
+  logger.info(PSTR("Loaded settings from flash"));
 
   // Display loaded setting on debug
-  getJSONSettings(buffer, BUF_SIZE);
-  logger.debug(F("FLASH: %s"), buffer);
-  return 1;
+  if (settings.flags.debug) {
+    getJSONSettings(buffer, BUF_SIZE);
+    logger.debug(PSTR("FLASH: %s"), buffer);
+  }
+  return validCRC;
 }
 
 void setDefaultSettings(struct ST_SETTINGS& p_settings) {
-  String(F(DEFAULT_LOGIN)).toCharArray(p_settings.login, AUTHBASIC_LEN_USERNAME-1);
-  String(F(DEFAULT_PASSWORD)).toCharArray(p_settings.password, AUTHBASIC_LEN_PASSWORD-1);
-  String(F("RemoteRelay")).toCharArray(p_settings.ssid, 64);
-  p_settings.debug = false;
-  p_settings.serial = false;
+  strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
+  strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
+  strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
+  p_settings.flags.wearlevel_mark = 0b11;
+  p_settings.flags.debug = false;
+  p_settings.flags.serial = false;
   led_scream(0b10101010);
 }
-
 
 /**
  * General helpers 
@@ -156,8 +158,8 @@ void setChannel(uint8_t channel, uint8_t mode) {
   // Save status 
   channels[channel - 1] = mode;
   
-  logger.info(F("Channel %.1i switched to %.3s"), channel, (mode == MODE_ON) ? "on" : "off");
-  logger.debug(F("Sending payload %02X%02X%02X%02X"), payload[0], payload[1], payload[2], payload[3]);
+  logger.info(PSTR("Channel %.1i switched to %.3s"), channel, (mode == MODE_ON) ? "on" : "off");
+  logger.debug(PSTR("Sending payload %02X%02X%02X%02X"), payload[0], payload[1], payload[2], payload[3]);
   
   // Give some time to the watchdog
   ESP.wdtFeed();
@@ -166,38 +168,39 @@ void setChannel(uint8_t channel, uint8_t mode) {
   // Send hex payload
   Serial.write(payload, sizeof(payload));
   
-  if (settings.serial) {
+  if (settings.flags.serial) {
     Serial.println(""); // Clear the line for log output
   }
 }
 
 void getJSONSettings(char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  snprintf(p_buffer, bufSize, String(F(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s}
-)=="==")).c_str()
+  snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s}
+)=="==")
     , settings.login
-    , bool2str(settings.debug)
-    , bool2str(settings.serial)
+    , bool2str(settings.flags.debug)
+    , bool2str(settings.flags.serial)
+    , bool2str(settings.flags.webservice)
   );
 }
 
-char* getJSONState(uint8_t channel) {
+void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  snprintf(buffer, BUF_SIZE, String(F(R"=="==({"channel":%.1i,"mode":"%.3s"}
-)=="==")).c_str()
+  snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"channel":%.1i,"mode":"%.3s"}
+)=="==")
     , channel
     , (channels[channel - 1] == MODE_ON) ? "on" : "off"
   );
+}
 
-  return buffer;
+void configModeCallback (WiFiManager *myWiFiManager) {
+  
 }
 
 void setup()  {
-  WiFiManager wifiManager;
-  
   Serial.begin(115200);
   EEPROM.begin(512);
-  logger.info(F("RemoteRelay version %s started."), VERSION);
+  logger.info(PSTR("RemoteRelay version %s started."), VERSION);
   
   // Load settigns from flash
   if (!loadSettings(settings)) {
@@ -212,49 +215,90 @@ void setup()  {
   for (uint8_t i = sizeof(channels); i > 0; ) {
     setChannel(i, channels[--i]);
   }
-
-  // Configure custom parameters
-  WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
-  WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
-  WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, 64);
-  wifiManager.setSaveConfigCallback([](){
-    shouldSaveConfig = true;
-  });
-  wifiManager.addParameter(&http_login);
-  wifiManager.addParameter(&http_password);
-  wifiManager.addParameter(&http_ssid);
-  
-  // Connect to Wifi or ask for SSID
-  wifiManager.autoConnect(settings.ssid);
-
-  // Save new configuration set by captive portal
-  if (shouldSaveConfig) {
-    strncpy(settings.login, http_login.getValue(), AUTHBASIC_LEN_USERNAME);
-    strncpy(settings.password, http_password.getValue(), AUTHBASIC_LEN_PASSWORD);
-    strncpy(settings.ssid, http_ssid.getValue(), 64);
-
-    logger.info(F("Saving new config from portal web page"));
-    saveSettings(settings);
-  }
-
-  // Display local ip
-  logger.info(F("Connected. IP address: %s"), WiFi.localIP().toString().c_str());
-  
-  setup_web_handlers(sizeof(channels));
-  server.begin();
-  
-  logger.info(F("HTTP server started."));
-}
-
-void resetWiFiManager() {
-  WiFiManager wifiManager;
-  //reset saved settings
-  wifiManager.resetSettings();
 }
 
 void loop() {
-  server.handleClient();
-#ifdef NUVOTON_AT_REPLIES
+  switch (myLoopState) {
+    case SHUTDOWN_REQUESTED:
+      myLoopState = SHUTDOWN_HALT;
+      delay(3000);
+    break;
+    case SHUTDOWN_HALT:
+      logger.info(PSTR("Restarting..."));
+    
+      ESP.restart();
+    break;
+    case WEB_REQUESTED:
+      // Display local ip
+      logger.info(PSTR("Connected. IP address: %s"), WiFi.localIP().toString().c_str());
+      
+      setup_web_handlers(sizeof(channels));
+      /* wifiManager handles server
+      server.begin();
+      */
+      
+      logger.info(PSTR("HTTP server started."));
+    break;
+    case STA_REQUESTED: {
+      WiFi.mode(WIFI_STA);
+    
+      // Configure custom parameters
+      WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
+      WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
+      WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, 64);
+      wifiManager.setSaveConfigCallback([](){
+        shouldSaveConfig = true;
+      });
+      wifiManager.addParameter(&http_login);
+      wifiManager.addParameter(&http_password);
+      wifiManager.addParameter(&http_ssid);
+  
+      wifiManager.setConfigPortalBlocking(false);
+      wifiManager.setRemoveDuplicateAPs(false);
+      wifiManager.setAPCallback(configModeCallback);
+      // Connect to Wifi or ask for SSID
+      bool res = wifiManager.autoConnect(settings.ssid);
+    
+      /*
+      wifiManager.setConfigPortalTimeout(timeout);
+      wifiManager.startConfigPortal(settings.ssid);
+      wifiManager.startWebPortal();
+      */
+    }
+    break;
+    case AUTO_MODE:
+    case STA_WEB: // fall-through
+      /* now handled by wifiManager portal server service
+      server.handleClient();
+      */
+    break;
+    case EEPROM_DESTROY_CRC: {
+      struct ST_SETTINGS tmp_settings;
+      if (!loadSettings(tmp_settings)) {
+        // it already is incorrect - nop.
+    break;
+      }
+      uint8_t crc = EEPROM.read(sizeof(struct ST_SETTINGS));
+      // what a coincidence
+      if (crc == 0) {
+        myLoopState = ERASE_EEPROM;
+    break;
+      }
+      for (int i = 8; i --> 0; ) {
+        
+      }
+      //EEPROM.write(sizeof(struct ST_SETTINGS), );
+    }
+    break;
+    case ERASE_EEPROM:
+      // spi_flash_geometry.h, FLASH_SECTOR_SIZE 0x1000
+    break;
+    default:
+      logger.info(PSTR("WTF"));
+    break;
+  }
+
+#ifndef DISABLE_NUVOTON_AT_REPLIES
   // pretend to be an AT device here
   if (Serial.available()) {
     atreplies.handle_nuvoTon_comms(logger);
