@@ -47,7 +47,9 @@
 #define MODE_ON 1               // See LC-Relay board datasheet for open/close values
 #define MODE_OFF 0
 
-// 512 bytes available (EEPROM.begin).
+#define ST_SETTINGS_WATERMARK_BITS 4
+
+// 512 bytes mapped (EEPROM.begin).
 struct ST_SETTINGS {
   public:
     union {
@@ -55,10 +57,11 @@ struct ST_SETTINGS {
         /**
          * Count the number of zeroes to rush along the linked list.
          * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
+         * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
          */
-        uint8_t wearlevel_mark :2;
-        uint8_t debug          :1;
-        uint8_t serial         :1;
+        byte wearlevel_mark    :ST_SETTINGS_WATERMARK_BITS;
+        byte debug             :1;
+        byte serial            :1;
         /**
          * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
            AT+CIPMUX=1
@@ -68,21 +71,23 @@ struct ST_SETTINGS {
          * If not set, µC may sleep between ping pong intervals.
          * If switch 1 is pressed/hold during boot, 
          */
-        uint8_t webservice     :1;
+        byte webservice        :1;
+        byte wifimanager_portal:1;
       };
       // each member needs to have the same type that the full bitfield has
-      uint8_t reg;
+      byte reg;
     } flags;
     char login[AUTHBASIC_LEN_USERNAME];
     char password[AUTHBASIC_LEN_PASSWORD];
+    /**
+     * The access point's SSID.
+     */
     char ssid[32+1];
-};
-
-struct ST_SETTINGS_FLAGS {
-  bool debug;
-  bool serial;
-  bool login;
-  bool password;
+    /**
+     * The access point's password.
+     */
+    char wpa_key[64+1];
+    long erase_cycles;
 };
 
 enum MyLoopState {
@@ -95,17 +100,13 @@ enum MyLoopState {
   // normal operation
   STA_WEB,
   // fallback operation, autoConnect
-  AUTO_MODE,
+  AUTO_REQUESTED,
   // delayed shutdown
   SHUTDOWN_REQUESTED,
   // shutdown now
   SHUTDOWN_HALT,
   // write all 1s to used EEPROM flash page. If it was bitwise EEPROM, would have just stored an invalid CRC value instead.
   ERASE_EEPROM,
-  // write a zero anywhere in CRC to force loading default settings at boot
-  EEPROM_DESTROY_CRC,
-  // save settings to EEPROM flash
-  SAVE_SETTINGS,
   // AT+RESTORE received
   RESTORE,
   // AT+RST received (when switching AT+CWMODE. nuvoTon tries up to 3 times about every 28 seconds)
@@ -131,9 +132,10 @@ extern WiFiManager wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
 void saveSettings(struct ST_SETTINGS &p_settings);
+void eeprom_destroy_crc();
 // Doesn't need to be visible yet.
-//bool loadSettings(struct ST_SETTINGS &p_settings);
-void setDefaultSettings(struct ST_SETTINGS& p_settings);
+//long loadSettings(struct ST_SETTINGS &p_settings);
+//void setDefaultSettings(struct ST_SETTINGS& p_settings);
 void getJSONSettings(char buffer[], size_t bufSize);
 void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize);
 

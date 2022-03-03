@@ -149,15 +149,16 @@ return;
   logger.info(PSTR("Reset settings to default"));
 
   wifiManager.resetSettings();
-  setDefaultSettings(settings);
+  //setDefaultSettings(settings);
 
   // Don't write default settings in EEPROM flash...
   //saveSettings(settings);
   
+  eeprom_destroy_crc();
   // Send response now
   wifiManager.server->send(200, FPSTR(CT_TEXT), F("Reset OK"));
-  
-  myLoopState = ERASE_EEPROM;
+
+  //myLoopState = EEPROM_DESTROY_CRC;
 }
 
 /**

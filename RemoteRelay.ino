@@ -20,11 +20,12 @@
  * ***********************************************************************/
 
 // hardcoded pinging of 8.8.8.8 to save space and config overhead
-// AT+RESTORE could change from AUTO_MODE to AP_REQUESTED
+// AT+RESTORE could change from STA_{WEB,LITE} to AP_REQUESTED
 
 // board manager: "Generic ESP8266 Board" https://randomnerdtutorials.com/how-to-install-esp8266-board-arduino-ide/
 // preferences additional: https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
+#include <spi_flash.h>
 #include <EEPROM.h>
 
 #include "RemoteRelay.h"
@@ -59,6 +60,8 @@ static uint8_t channels[] = {
 
 //assert sizeof(channels) <= 9: "print functions are restricted to one-digit channel count"
 
+static int16_t settings_offset;
+
 /**
  * Flash memory helpers 
  ********************************************************************************/
@@ -82,36 +85,109 @@ uint8_t crc8(const uint8_t *addr, uint8_t len) {
   return crc;
 }
 
-void saveSettings(struct ST_SETTINGS &p_settings) {
-  // Use the last byte for CRC
-  uint8_t theCRC = crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS));
-  // TODO: make use of wearlevel_mark, shift save position
-  EEPROM.put(0, p_settings);
-  /*
-  for (int i = sizeof(buffer); i --> 0; ) {
-    EEPROM.write(i, buffer[i]);
+#define SETTINGS_FALSH_SIZE sizeof(struct ST_SETTINGS)+1
+#define SETTINGS_FALSH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FALSH_SIZE)
+
+/**
+ * write a zero anywhere in CRC to force loading default settings at boot
+ */
+void eeprom_destroy_crc() {
+  struct ST_SETTINGS tmp_settings;
+  if (loadSettings(tmp_settings) < 0) {
+    // it already is incorrect - nop.
+return;
   }
-  */
-  EEPROM.put(sizeof(struct ST_SETTINGS), theCRC);
+  tmp_settings.flags.wearlevel_mark <<= 1;
+  uint8_t crc = EEPROM.read(settings_offset);
+  if (crc == crc8((uint8_t*) &tmp_settings, sizeof(struct ST_SETTINGS))) {
+    if (crc == 0) {
+      // what a coincidence
+      bool found = false;
+      char *ptr = tmp_settings.login;
+      if (offsetof(ST_SETTINGS, password) < offsetof(ST_SETTINGS, login)) {
+        // FIXME: need a define for char[] capacities in ST_SETTINGS...
+        while (true) {
+          led_scream(0b11001100);
+        }
+        // # error ERROR ST_SETTINGS members changed unpredictably
+      }
+      for (int i = offsetof(ST_SETTINGS, password) - offsetof(ST_SETTINGS, login); i --> 0; ++ptr) {
+        if ((*ptr) != 0) {
+          (*ptr) = 0;
+          found = true;
+      break;
+        }
+      }
+      if (!found) {
+        
+      }
+    } else {
+      // Arduino.h byte is unsigned
+      byte i = 0b10000000;
+      while (i > 0 && (crc & i) == 0) {
+        i >>= 1;
+      }
+      //assert i != 0;
+      crc &= ~i;
+      // it can't possibly happen that it doesn't find a bit because 0 case was handled before.
+      EEPROM.write(settings_offset + sizeof(struct ST_SETTINGS), crc);
+    }
+  }
+  EEPROM.put(settings_offset, tmp_settings);
+}
+
+void saveSettings(struct ST_SETTINGS &p_settings) {
+  #ifdef EEPROM_SPI_NOR_REPROGRAM
+    eeprom_destroy_crc();
+  #endif
+  uint8_t theCRC = crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS));
+  settings_offset += SETTINGS_FALSH_SIZE;
+  if (settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
+    p_settings.erase_cycles += 1;
+    settings_offset = 0;
+  }
+  EEPROM.put(settings_offset, p_settings);
+  EEPROM.put(settings_offset + sizeof(struct ST_SETTINGS), theCRC);
   EEPROM.commit();
 }
 
-bool loadSettings(struct ST_SETTINGS &p_settings) {
-  // Use the last byte for CRC
-  
-  EEPROM.get(0, p_settings);
-  uint8_t const *_buffer = (uint8_t*) &p_settings;
-  /*
-  for (int i = sizeof(struct ST_SETTINGS); i --> 0; ) {
-    _buffer[i] = uint8_t(EEPROM.read(i));
+/**
+ * Reads settings from EEPROM flash into p_settings.
+ * Returns the byte start location of the loaded settings block.
+ */
+long loadSettings(struct ST_SETTINGS &p_settings) {
+  long i = 0;
+  int x;
+  while (i < (SETTINGS_FALSH_OVERADDR)) {
+    EEPROM.get(i, p_settings);
+    // check if marked as deleted and how many bits are set 0
+    x = p_settings.flags.wearlevel_mark;
+    if (x < ((1<<ST_SETTINGS_WATERMARK_BITS) - 1)) {
+      for (int nb = ST_SETTINGS_WATERMARK_BITS; nb --> 0; ) {
+        // some way to spare one instruction?^^
+        if (x & (1<<nb) == 0) {
+          i += sizeof(struct ST_SETTINGS) + 1;
+        }
+      }
+    } else if (crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(i + sizeof(struct ST_SETTINGS)))) {
+      // index of valid settings found
+  break;
+    } else {
+      i += sizeof(struct ST_SETTINGS) + 1;
+    }
   }
-  */
-
-  // Check CRC
-  bool validCRC = (crc8(_buffer, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(sizeof(struct ST_SETTINGS))));
-  if (!validCRC) {
-    logger.info(PSTR("Bad CRC, loading default settings..."));
-    setDefaultSettings(p_settings);
+  if (i >= (SETTINGS_FALSH_OVERADDR)) {
+    logger.info(PSTR("No valid settings found in EEPROM flash, loading default settings..."));
+    //setDefaultSettings(p_settings);
+    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
+    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
+    strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
+    p_settings.flags.wearlevel_mark = ((1<<ST_SETTINGS_WATERMARK_BITS) - 1);
+    p_settings.flags.debug = false;
+    p_settings.flags.serial = false;
+    led_scream(0b10101010);
+    // almost forgot
+    i = -(sizeof(struct ST_SETTINGS)+1);
   }
   logger.setSerial(p_settings.flags.serial);
   logger.info(PSTR("Loaded settings from flash"));
@@ -121,18 +197,12 @@ bool loadSettings(struct ST_SETTINGS &p_settings) {
     getJSONSettings(buffer, BUF_SIZE);
     logger.debug(PSTR("FLASH: %s"), buffer);
   }
-  return validCRC;
+  return i;
 }
+#undef SETTINGS_FALSH_OVERADDR
+#undef SETTINGS_FALSH_SIZE
 
-void setDefaultSettings(struct ST_SETTINGS& p_settings) {
-  strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
-  strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
-  strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
-  p_settings.flags.wearlevel_mark = 0b11;
-  p_settings.flags.debug = false;
-  p_settings.flags.serial = false;
-  led_scream(0b10101010);
-}
+//void setDefaultSettings(struct ST_SETTINGS& p_settings)
 
 /**
  * General helpers 
@@ -203,31 +273,43 @@ void setup()  {
   logger.info(PSTR("RemoteRelay version %s started."), VERSION);
   
   // Load settigns from flash
-  if (!loadSettings(settings)) {
-    //logger.info("Saving defaults in 10 seconds...");
-    //delay(10000);
-    //saveSettings(settings);
-
-    // nop - don't need to save defaults because they can be restored anytime. Save write cycles.
-  }
+  settings_offset = loadSettings(settings);
+  // nop - don't need to save defaults in error case because they can be restored anytime. Save write cycles.
+  
+  // Is a setter without unwanted side-effects.
+  wifiManager.setConfigPortalBlocking(false);
 
   // Be sure the relay are in the default state (off)
   for (uint8_t i = sizeof(channels); i > 0; ) {
     setChannel(i, channels[--i]);
   }
+
+  #ifdef DISABLE_NUVOTON_AT_REPLIES
+  myLoopState = AUTO_REQUESTED;
+  #endif
 }
 
 void loop() {
   switch (myLoopState) {
+    #ifndef DISABLE_NUVOTON_AT_REPLIES
+    // TODO: missing something?
+    // wait for serial commands
+    case AFTER_SETUP:
+      // TODO: light sleep and ignore "AT"/react on "+" (parsing serial input)?
+      // handled in any case after switch
+    break;
+    #endif
+    // pucgenie: fully implemented
     case SHUTDOWN_REQUESTED:
       myLoopState = SHUTDOWN_HALT;
       delay(3000);
     break;
+    // pucgenie: fully implemented
     case SHUTDOWN_HALT:
       logger.info(PSTR("Restarting..."));
-    
       ESP.restart();
     break;
+    // TODO: don't assume WiFiManager portal is running!
     case WEB_REQUESTED:
       // Display local ip
       logger.info(PSTR("Connected. IP address: %s"), WiFi.localIP().toString().c_str());
@@ -236,62 +318,60 @@ void loop() {
       /* wifiManager handles server
       server.begin();
       */
-      
+
+      wifiManager.startWebPortal();
       logger.info(PSTR("HTTP server started."));
+      myLoopState = AP_MODE;
     break;
+    // TODO: missing WiFiManager portal disable feature
     case STA_REQUESTED: {
       WiFi.mode(WIFI_STA);
-    
-      // Configure custom parameters
-      WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
-      WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
-      WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, 64);
-      wifiManager.setSaveConfigCallback([](){
-        shouldSaveConfig = true;
-      });
-      wifiManager.addParameter(&http_login);
-      wifiManager.addParameter(&http_password);
-      wifiManager.addParameter(&http_ssid);
-  
-      wifiManager.setConfigPortalBlocking(false);
-      wifiManager.setRemoveDuplicateAPs(false);
-      wifiManager.setAPCallback(configModeCallback);
+
+      if (settings.flags.wifimanager_portal) {
+        // Configure custom parameters
+        WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
+        WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
+        WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, 64);
+        wifiManager.setSaveConfigCallback([](){
+          shouldSaveConfig = true;
+        });
+        wifiManager.addParameter(&http_login);
+        wifiManager.addParameter(&http_password);
+        wifiManager.addParameter(&http_ssid);
+        
+        wifiManager.setRemoveDuplicateAPs(false);
+        wifiManager.setAPCallback(configModeCallback);
+        wifiManager.setCaptivePortalEnable(true);
+      }
       // Connect to Wifi or ask for SSID
       bool res = wifiManager.autoConnect(settings.ssid);
-    
       /*
       wifiManager.setConfigPortalTimeout(timeout);
       wifiManager.startConfigPortal(settings.ssid);
       wifiManager.startWebPortal();
       */
+      myLoopState = STA_WEB;
     }
     break;
-    case AUTO_MODE:
+    // TODO: missing something?
+    case AUTO_REQUESTED: // fall-through
+    // TODO: missing something?
+    case AP_MODE:
+    // TODO: missing something?
     case STA_WEB: // fall-through
       /* now handled by wifiManager portal server service
       server.handleClient();
       */
+      wifiManager.process();
     break;
-    case EEPROM_DESTROY_CRC: {
-      struct ST_SETTINGS tmp_settings;
-      if (!loadSettings(tmp_settings)) {
-        // it already is incorrect - nop.
-    break;
-      }
-      uint8_t crc = EEPROM.read(sizeof(struct ST_SETTINGS));
-      // what a coincidence
-      if (crc == 0) {
-        myLoopState = ERASE_EEPROM;
-    break;
-      }
-      for (int i = 8; i --> 0; ) {
-        
-      }
-      //EEPROM.write(sizeof(struct ST_SETTINGS), );
-    }
+    // TODO: missing something?
+    case AP_REQUESTED:
+      wifiManager.setCaptivePortalEnable(true);
+      wifiManager.startConfigPortal();
     break;
     case ERASE_EEPROM:
       // spi_flash_geometry.h, FLASH_SECTOR_SIZE 0x1000
+      // TODO: implement it?
     break;
     default:
       logger.info(PSTR("WTF"));
