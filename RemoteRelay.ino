@@ -43,6 +43,8 @@ struct ST_SETTINGS settings;
 Logger logger = Logger();
 bool shouldSaveConfig = false;
 MyLoopState myLoopState = AFTER_SETUP;
+MyWiFiState myWiFiState = ;
+extern MyWebState myWebState;
 WiFiManager wifiManager;
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
@@ -119,7 +121,28 @@ return;
         }
       }
       if (!found) {
-        
+        for (int i = offsetof(ST_SETTINGS, ssid) - offsetof(ST_SETTINGS, password); i --> 0; ++ptr) {
+          if ((*ptr) != 0) {
+            (*ptr) = 0;
+            found = true;
+        break;
+          }
+        }
+      }
+      if (!found) {
+        for (int i = offsetof(ST_SETTINGS, wpa_key) - offsetof(ST_SETTINGS, ssid); i --> 0; ++ptr) {
+          if ((*ptr) != 0) {
+            (*ptr) = 0;
+            found = true;
+        break;
+          }
+        }
+      }
+      if (!found)  
+       // FIXME: erase
+        while (true) {
+          led_scream(0b11101110);
+        }
       }
     } else {
       // Arduino.h byte is unsigned
@@ -128,7 +151,7 @@ return;
         i >>= 1;
       }
       //assert i != 0;
-      crc &= ~i;
+      crc ^= i;
       // it can't possibly happen that it doesn't find a bit because 0 case was handled before.
       EEPROM.write(settings_offset + sizeof(struct ST_SETTINGS), crc);
     }
@@ -145,6 +168,7 @@ void saveSettings(struct ST_SETTINGS &p_settings) {
   if (settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
     p_settings.erase_cycles += 1;
     settings_offset = 0;
+    //FIXME: erase sector explicitly or by using EEPROM class' auto-detection?
   }
   EEPROM.put(settings_offset, p_settings);
   EEPROM.put(settings_offset + sizeof(struct ST_SETTINGS), theCRC);
@@ -154,29 +178,32 @@ void saveSettings(struct ST_SETTINGS &p_settings) {
 /**
  * Reads settings from EEPROM flash into p_settings.
  * Returns the byte start location of the loaded settings block.
+ * 
+ * @param the_address Should be 0 to load the first valid settings block. Can be an exact address too.
  */
-long loadSettings(struct ST_SETTINGS &p_settings) {
-  long i = 0;
+bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
   int x;
-  while (i < (SETTINGS_FALSH_OVERADDR)) {
-    EEPROM.get(i, p_settings);
+  bool ret;
+  while (ret = (the_address < (SETTINGS_FALSH_OVERADDR))) {
+    EEPROM.get(the_address, p_settings);
     // check if marked as deleted and how many bits are set 0
     x = p_settings.flags.wearlevel_mark;
     if (x < ((1<<ST_SETTINGS_WATERMARK_BITS) - 1)) {
       for (int nb = ST_SETTINGS_WATERMARK_BITS; nb --> 0; ) {
         // some way to spare one instruction?^^
         if (x & (1<<nb) == 0) {
-          i += sizeof(struct ST_SETTINGS) + 1;
+          the_address += sizeof(struct ST_SETTINGS) + 1;
         }
       }
-    } else if (crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(i + sizeof(struct ST_SETTINGS)))) {
+    } else if (crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(the_address + sizeof(struct ST_SETTINGS)))) {
       // index of valid settings found
+      EEPROM.get(the_address, p_settings);
   break;
     } else {
-      i += sizeof(struct ST_SETTINGS) + 1;
+      the_address += sizeof(struct ST_SETTINGS) + 1;
     }
   }
-  if (i >= (SETTINGS_FALSH_OVERADDR)) {
+  if (!ret) {
     logger.info(PSTR("No valid settings found in EEPROM flash, loading default settings..."));
     //setDefaultSettings(p_settings);
     strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
@@ -185,9 +212,10 @@ long loadSettings(struct ST_SETTINGS &p_settings) {
     p_settings.flags.wearlevel_mark = ((1<<ST_SETTINGS_WATERMARK_BITS) - 1);
     p_settings.flags.debug = false;
     p_settings.flags.serial = false;
+    
     led_scream(0b10101010);
-    // almost forgot
-    i = -(sizeof(struct ST_SETTINGS)+1);
+    
+    the_address = 0;
   }
   logger.setSerial(p_settings.flags.serial);
   logger.info(PSTR("Loaded settings from flash"));
@@ -197,7 +225,7 @@ long loadSettings(struct ST_SETTINGS &p_settings) {
     getJSONSettings(buffer, BUF_SIZE);
     logger.debug(PSTR("FLASH: %s"), buffer);
   }
-  return i;
+  return ret;
 }
 #undef SETTINGS_FALSH_OVERADDR
 #undef SETTINGS_FALSH_SIZE

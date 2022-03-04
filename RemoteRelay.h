@@ -93,14 +93,6 @@ struct ST_SETTINGS {
 enum MyLoopState {
   // first loop call
   AFTER_SETUP,
-  // config mode, full webservices for testing
-  AP_MODE,
-  // no webservices
-  STA_LITE,
-  // normal operation
-  STA_WEB,
-  // fallback operation, autoConnect
-  AUTO_REQUESTED,
   // delayed shutdown
   SHUTDOWN_REQUESTED,
   // shutdown now
@@ -111,13 +103,27 @@ enum MyLoopState {
   RESTORE,
   // AT+RST received (when switching AT+CWMODE. nuvoTon tries up to 3 times about every 28 seconds)
   RESET,
-  // wants AP_MODE
+};
+
+enum MyWiFiState {
   AP_REQUESTED,
-  // wants STA_{LITE|WEB}
   STA_REQUESTED,
+  AP_MODE,
+  STA_MODE,
+  // fallback operation, autoConnect
+  AUTO_REQUESTED,
+  // There is no valid mode without WiFi
+  //WIFI_OFF,
+}
+
+enum MyWebState {
   // nuvoTon sends the same commands regardless of CWMODE (but CWMODE=1 waits for "WIFI GOT IP" to be received by nuvoTon)
   WEB_REQUESTED,
-};
+  WEB_FULL,
+  WEB_CONFIG,
+  WEB_REST,
+  WEB_DISABLED,
+}
 
 #define BUF_SIZE 384            // Used for string buffers
 extern char buffer[];             // Global char* to avoid multiple String concatenation which causes RAM fragmentation
@@ -128,13 +134,15 @@ extern Logger logger;
 extern struct ST_SETTINGS settings;
 extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
 extern MyLoopState myLoopState;
+extern MyWiFiState myWiFiState;
+extern MyWebState myWebState;
 extern WiFiManager wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
 void saveSettings(struct ST_SETTINGS &p_settings);
 void eeprom_destroy_crc();
 // Doesn't need to be visible yet.
-//long loadSettings(struct ST_SETTINGS &p_settings);
+//bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &out_address);
 //void setDefaultSettings(struct ST_SETTINGS& p_settings);
 void getJSONSettings(char buffer[], size_t bufSize);
 void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize);
