@@ -23,4 +23,18 @@
 #define bool2str(x) x ? "true" : "false"
 #define charnonempty(x) x[0] != 0
 
+#define GET_BIT_FIELD_WIDTH(T, f) \
+    []() constexpr -> unsigned int \
+    { \
+        T t{}; \
+        t.f = ~0; \
+        unsigned int bitCount = 0; \
+        while (t.f != 0) \
+        { \
+            t.f >>= 1; \
+            ++bitCount; \
+        } \
+        return bitCount; \
+    }()
+
 #endif  // SYNTACTICSUGAR_H

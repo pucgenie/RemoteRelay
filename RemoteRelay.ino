@@ -90,8 +90,61 @@ uint8_t crc8(const uint8_t *addr, uint8_t len) {
 #define SETTINGS_FALSH_SIZE sizeof(struct ST_SETTINGS)+1
 #define SETTINGS_FALSH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FALSH_SIZE)
 
-// forward declaration
-bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address);
+/**
+ * Reads settings from EEPROM flash into p_settings.
+ * Returns the byte start location of the loaded settings block.
+ * 
+ * @param the_address Should be 0 to load the first valid settings block. Can be an exact address too.
+ */
+bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
+  int x;
+  bool ret;
+  while (ret = (the_address < (SETTINGS_FALSH_OVERADDR))) {
+    EEPROM.get(the_address, p_settings);
+    // check if marked as deleted and how many bits are set 0
+    x = p_settings.flags.wearlevel_mark;
+    if (x < ((1<<ST_SETTINGS_WATERMARK_BITS) - 1)) {
+      for (int nb = ST_SETTINGS_WATERMARK_BITS; nb --> 0; ) {
+        // some way to spare one instruction?^^
+        if (x & (1<<nb) == 0) {
+          the_address += sizeof(struct ST_SETTINGS) + 1;
+        }
+      }
+    } else if (crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(the_address + sizeof(struct ST_SETTINGS)))) {
+      // index of valid settings found
+      EEPROM.get(the_address, p_settings);
+  break;
+    } else {
+      the_address += sizeof(struct ST_SETTINGS) + 1;
+    }
+  }
+  if (!ret) {
+    logger.info(PSTR("{'settings': 'loading default'}"));
+    //setDefaultSettings(p_settings);
+    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
+    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
+    strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
+    p_settings.flags.wearlevel_mark = ((1<<ST_SETTINGS_WATERMARK_BITS) - 1);
+    p_settings.flags.debug = false;
+    p_settings.flags.serial = false;
+    
+    led_scream(0b10101010);
+    
+    the_address = 0;
+  } else {
+    // serial is disabled by default, so spare us another if after setting
+    logger.info(PSTR("Loaded settings from flash"));
+  }
+  // could have changed
+  logger.setSerial(p_settings.flags.serial);
+
+  // Display loaded setting on debug
+  if (settings.flags.debug) {
+    getJSONSettings(buffer, BUF_SIZE);
+    logger.logNow(buffer);
+  }
+  return ret;
+}
 
 /**
  * write a zero anywhere in CRC to force loading default settings at boot
@@ -180,61 +233,6 @@ void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset) {
   EEPROM.commit();
 }
 
-/**
- * Reads settings from EEPROM flash into p_settings.
- * Returns the byte start location of the loaded settings block.
- * 
- * @param the_address Should be 0 to load the first valid settings block. Can be an exact address too.
- */
-bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
-  int x;
-  bool ret;
-  while (ret = (the_address < (SETTINGS_FALSH_OVERADDR))) {
-    EEPROM.get(the_address, p_settings);
-    // check if marked as deleted and how many bits are set 0
-    x = p_settings.flags.wearlevel_mark;
-    if (x < ((1<<ST_SETTINGS_WATERMARK_BITS) - 1)) {
-      for (int nb = ST_SETTINGS_WATERMARK_BITS; nb --> 0; ) {
-        // some way to spare one instruction?^^
-        if (x & (1<<nb) == 0) {
-          the_address += sizeof(struct ST_SETTINGS) + 1;
-        }
-      }
-    } else if (crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(the_address + sizeof(struct ST_SETTINGS)))) {
-      // index of valid settings found
-      EEPROM.get(the_address, p_settings);
-  break;
-    } else {
-      the_address += sizeof(struct ST_SETTINGS) + 1;
-    }
-  }
-  if (!ret) {
-    logger.info(PSTR("{'settings': 'loading default'}"));
-    //setDefaultSettings(p_settings);
-    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
-    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
-    strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
-    p_settings.flags.wearlevel_mark = ((1<<ST_SETTINGS_WATERMARK_BITS) - 1);
-    p_settings.flags.debug = false;
-    p_settings.flags.serial = false;
-    
-    led_scream(0b10101010);
-    
-    the_address = 0;
-  } else {
-    // serial is disabled by default, so spare us another if after setting
-    logger.info(PSTR("Loaded settings from flash"));
-  }
-  // could have changed
-  logger.setSerial(p_settings.flags.serial);
-
-  // Display loaded setting on debug
-  if (settings.flags.debug) {
-    getJSONSettings(buffer, BUF_SIZE);
-    logger.logNow(buffer);
-  }
-  return ret;
-}
 #undef SETTINGS_FALSH_OVERADDR
 #undef SETTINGS_FALSH_SIZE
 
