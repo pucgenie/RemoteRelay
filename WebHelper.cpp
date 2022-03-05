@@ -37,6 +37,8 @@ static const String WebParam[] = {
   , "serial"
   , "wifimanager_portal"
   , "webservice"
+  , "ssid"
+  , "wpa_key"
 };
 
 // pucgenie: We need the memory in any case because there is no path tree parser...
@@ -48,7 +50,7 @@ static const char *channelPath[] = {
   , "/channel/3"
   , "/channel/4"
 #endif
-                      };
+};
 
 bool isAuthBasicOK() {
   // Disable auth if not credential provided
@@ -138,13 +140,32 @@ return;
       }
     break;
       case 4: { // wifimanager_portal
-        settings.flags.wifimanager_portal = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        bool newSetting = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        if (settings.flags.wifimanager_portal != newSetting) {
+          // FIXME: stop or start it
+        }
+        settings.flags.wifimanager_portal = newSetting;
         logger.info(PSTR("Updated wifimanager_portal to %.5s."), bool2str(settings.flags.wifimanager_portal));
       }
     break;
       case 5: { // webservice
-        settings.flags.webservice = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        bool newSetting = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        if (settings.flags.webservice != newSetting) {
+          // FIXME: stop or start it
+        }
+        settings.flags.webservice = newSetting;
         logger.info(PSTR("Updated webservice to %.5s."), bool2str(settings.flags.webservice));
+      }
+    break;
+      case 6: { // ssid
+        wifiManager.server->arg(i).toCharArray(settings.ssid, AUTHBASIC_LEN_PASSWORD);
+        logger.info(PSTR("Updated serial to %.5s."), bool2str(settings.flags.serial));
+      }
+    break;
+      case 7: { // wpa_key
+        settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        logger.setSerial(settings.flags.serial);
+        logger.info(PSTR("Updated serial to %.5s."), bool2str(settings.flags.serial));
       }
     break;
     }

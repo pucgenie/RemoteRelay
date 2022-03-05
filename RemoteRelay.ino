@@ -121,10 +121,11 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
   if (!ret) {
     logger.info(PSTR("{'settings': 'loading default'}"));
     //setDefaultSettings(p_settings);
-    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
-    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
-    strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
-    p_settings.flags.wearlevel_mark = ((1<<GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark)) - 1);
+    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME+1);
+    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD+1);
+    strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), LENGTH_SSID+1);
+    strncpy_P(p_settings.wpa_key, PSTR("1234x5678"), LENGTH_WPA_KEY+1);
+    p_settings.flags.wearlevel_mark = ~0;
     p_settings.flags.debug = false;
     p_settings.flags.serial = false;
     
@@ -225,7 +226,7 @@ void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset) {
   if (p_settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
     p_settings.erase_cycles += 1;
     p_settings_offset = 0;
-    //FIXME: erase sector explicitly or by using EEPROM class' auto-detection?
+    //TODO: erase sector explicitly or keep using EEPROM class' auto-detection?
   }
   EEPROM.put(p_settings_offset, p_settings);
   EEPROM.put(p_settings_offset + sizeof(struct ST_SETTINGS), theCRC);
@@ -327,43 +328,50 @@ void setup()  {
 
 void loop() {
   switch (myLoopState) {
-    // TODO: missing something?
     case AFTER_SETUP:
       #ifndef DISABLE_NUVOTON_AT_REPLIES
       // wait for serial commands
       // TODO: light sleep and ignore "AT"/react on "+" (parsing serial input)?
       // handled in any case after switch
       #endif
+      // nop
     break;
     // pucgenie: fully implemented
-    case SHUTDOWN_REQUESTED:
+    case SHUTDOWN_REQUESTED: {
       delay(3000);
       myLoopState = SHUTDOWN_HALT;
+    }
     break;
     // pucgenie: fully implemented
-    case SHUTDOWN_HALT:
+    case SHUTDOWN_HALT: {
       logger.info(PSTR("{'action': 'restarting'}"));
       ESP.restart();
+    }
     break;
-    case ERASE_EEPROM:
+    // unused
+    case ERASE_EEPROM: {
       // spi_flash_geometry.h, FLASH_SECTOR_SIZE 0x1000
       // TODO: implement it?
       
       myLoopState = AFTER_SETUP;
+    }
     break;
-    //FIXME: implement!
-    case RESTORE:
-      // TODO
+    case RESTORE: {
+      logger.info("Received serial restore request, going to destroy settings in EEPROM...");
+      myLoopState = EEPROM_DESTROY_CRC;
+    }
     break;
-    //FIXME: implement!
-    case RESET:
-      // TODO
+    case RESET: {
+      // nop - because CWMODE is sent BEFORE reset request -.-
+      // TODO: maybe turn WiFi off again?
       myLoopState = AFTER_SETUP;
+    }
     break;
-    default:
+    default: {
       logger.info(PSTR("{'LoopState': 'invalid'}"));
       led_scream(0b10010010);
       myLoopState = SHUTDOWN_REQUESTED;
+    }
     break;
     case EEPROM_DESTROY_CRC: {
       eeprom_destroy_crc(settings_offset);
@@ -372,9 +380,10 @@ void loop() {
       myLoopState = AFTER_SETUP;
     }
     break;
-    case SAVE_SETTINGS:
+    case SAVE_SETTINGS: {
       saveSettings(settings, settings_offset);
       myLoopState = AFTER_SETUP;
+    }
     break;
   }
 
@@ -393,7 +402,7 @@ void loop() {
         // Configure custom parameters
         WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
         WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
-        WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, 64);
+        WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, LENGTH_SSID);
         wifiManager.setSaveConfigCallback([](){
           shouldSaveConfig = true;
         });

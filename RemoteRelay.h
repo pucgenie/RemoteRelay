@@ -40,8 +40,10 @@
 #endif
 
 // Internal constant
-#define AUTHBASIC_LEN_USERNAME 20+1        // Login or password 20 char max
-#define AUTHBASIC_LEN_PASSWORD 20+1        // Login or password 20 char max
+#define AUTHBASIC_LEN_USERNAME 20        // Login or password 20 char max
+#define AUTHBASIC_LEN_PASSWORD 20        // Login or password 20 char max
+#define LENGTH_SSID 32
+#define LENGTH_WPA_KEY 64
 #define VERSION "2.0"
 
 #define MODE_ON 1               // See LC-Relay board datasheet for open/close values
@@ -75,16 +77,16 @@ struct ST_SETTINGS {
       // each member needs to have the same type that the full bitfield has
       byte reg;
     } flags;
-    char login[AUTHBASIC_LEN_USERNAME];
-    char password[AUTHBASIC_LEN_PASSWORD];
+    char login[AUTHBASIC_LEN_USERNAME+1];
+    char password[AUTHBASIC_LEN_PASSWORD+1];
     /**
      * The access point's SSID.
      */
-    char ssid[32+1];
+    char ssid[LENGTH_SSID+1];
     /**
      * The access point's password.
      */
-    char wpa_key[64+1];
+    char wpa_key[LENGTH_WPA_KEY+1];
     long erase_cycles;
 };
 
