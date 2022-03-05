@@ -23,6 +23,12 @@
 #define bool2str(x) x ? "true" : "false"
 #define charnonempty(x) x[0] != 0
 
+/**
+ * You can indirectly read the actual bit width (maximum value) from compiler warnings.
+ * Using the slightly different approach mentioned in comments, w wouldn't get the compiler warning.
+ * @author https://stackoverflow.com/users/179895/TripShock
+ * https://stackoverflow.com/a/64862943/2714781
+ */
 #define GET_BIT_FIELD_WIDTH(T, f) \
     []() constexpr -> unsigned int \
     { \

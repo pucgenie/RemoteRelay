@@ -47,8 +47,6 @@
 #define MODE_ON 1               // See LC-Relay board datasheet for open/close values
 #define MODE_OFF 0
 
-#define ST_SETTINGS_WATERMARK_BITS 4
-
 // 512 bytes mapped (EEPROM.begin).
 struct ST_SETTINGS {
   public:
@@ -59,7 +57,7 @@ struct ST_SETTINGS {
          * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
          * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
          */
-        byte wearlevel_mark    :ST_SETTINGS_WATERMARK_BITS;
+        byte wearlevel_mark    :4;
         byte debug             :1;
         byte serial            :1;
         /**

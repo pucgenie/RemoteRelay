@@ -103,8 +103,8 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     EEPROM.get(the_address, p_settings);
     // check if marked as deleted and how many bits are set 0
     x = p_settings.flags.wearlevel_mark;
-    if (x < ((1<<ST_SETTINGS_WATERMARK_BITS) - 1)) {
-      for (int nb = ST_SETTINGS_WATERMARK_BITS; nb --> 0; ) {
+    if (x < ((1<<GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark)) - 1)) {
+      for (int nb = GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark); nb --> 0; ) {
         // some way to spare one instruction?^^
         if (x & (1<<nb) == 0) {
           the_address += sizeof(struct ST_SETTINGS) + 1;
@@ -124,7 +124,7 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME);
     strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD);
     strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), 64);
-    p_settings.flags.wearlevel_mark = ((1<<ST_SETTINGS_WATERMARK_BITS) - 1);
+    p_settings.flags.wearlevel_mark = ((1<<GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark)) - 1);
     p_settings.flags.debug = false;
     p_settings.flags.serial = false;
     
@@ -175,29 +175,26 @@ return;
         offsetof(ST_SETTINGS, wpa_key) - offsetof(ST_SETTINGS, ssid),
         offsetof(ST_SETTINGS, erase_cycles) - offsetof(ST_SETTINGS, wpa_key),
       };
-      {
-        bool string_terminator_found;
-        byte owf_i = sizeof(OVERWRITABLE_BYTES);
-        while ((!found) && (owf_i --> 0)) {
-          string_terminator_found = false;
-          for (int i = OVERWRITABLE_BYTES[owf_i]; i --> 0; ++ptr) {
-            if ((*ptr) == 0) {
-              string_terminator_found = true;
-            } else {
-              if (string_terminator_found) {
-                (*ptr) = 0;
-                found = true;
-          break;
-              }
+      bool string_terminator_found;
+      byte owf_i = sizeof(OVERWRITABLE_BYTES);
+      while ((!found) && (owf_i --> 0)) {
+        string_terminator_found = false;
+        for (int i = OVERWRITABLE_BYTES[owf_i]; i --> 0; ++ptr) {
+          if ((*ptr) == 0) {
+            string_terminator_found = true;
+          } else if (string_terminator_found) {
+            (*ptr) = 0;
+            // We are certain that changing a single bit changes the resulting CRC too.
+            found = true;
+        break;
             }
-          }
         }
-        // don't touch ST_SETTINGS.erase_cycles
-        if (!found) {
-           // FIXME: erase
-           while (true) {
-            led_scream(0b11101110);
-          }
+      }
+      // don't touch ST_SETTINGS.erase_cycles
+      if (!found) {
+         // FIXME: erase
+         while (true) {
+          led_scream(0b11101110);
         }
       }
     } else {
@@ -212,13 +209,14 @@ return;
       EEPROM.write(old_addr + sizeof(struct ST_SETTINGS), crc);
     }
     EEPROM.put(old_addr, tmp_settings);
+    // don't commit
   }
 }
 
 void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset) {
   #ifdef EEPROM_SPI_NOR_REPROGRAM
   {
-    uint16_t old_addr;
+    uint16_t old_addr = p_settings_offset;
     eeprom_destroy_crc(old_addr);
   }
   #endif
@@ -369,6 +367,8 @@ void loop() {
     break;
     case EEPROM_DESTROY_CRC: {
       eeprom_destroy_crc(settings_offset);
+      // where to commit then?
+      EEPROM.commit();
       myLoopState = AFTER_SETUP;
     }
     break;

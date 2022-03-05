@@ -27,6 +27,7 @@
 #include "divideandconquer.h"
 
 static PGM_P CT_JSON PROGMEM = "application/json";
+static const char* CT_TEXT = "text/plain";
 
 // pucgenie: Don't use F() here
 static const String WebParam[] = {
@@ -34,6 +35,7 @@ static const String WebParam[] = {
   , "login"
   , "password"
   , "serial"
+  , "wifimanager_portal"
   , "webservice"
 };
 
@@ -71,7 +73,7 @@ void handleGETDebug() {
 return;
   }
  
-  wifiManager.server->send(200, "text/plain", logger.getLog());
+  wifiManager.server->send(200, CT_TEXT, logger.getLog());
 }
 
 /**
@@ -102,7 +104,7 @@ return;
   }
   // Check if args have been supplied
   if (wifiManager.server->args() == 0) {
-    wifiManager.server->send(400, "text/plain", F("Invalid parameters\r\n"));
+    wifiManager.server->send(400, CT_TEXT, F("Invalid parameters\r\n"));
 return;
   }
 
@@ -110,25 +112,40 @@ return;
   for (uint8_t i = wifiManager.server->args(); i --> 0; ) {
     String param = wifiManager.server->argName(i);
     switch (binarysearchString(WebParam, param)) {
-      default:
-        wifiManager.server->send(400, "text/plain", "Unknown parameter: " + param + "\r\n");
+      default: {
+        wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
 return;
-      case 0: // debug
+      }
+      case 0: { // debug
         settings.flags.debug = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.info(PSTR("Updated debug to %.5s."), bool2str(settings.flags.debug));
+      }
     break;
-      case 1: // login
+      case 1: { // login
         wifiManager.server->arg(i).toCharArray(settings.login, AUTHBASIC_LEN_USERNAME);
         logger.info(PSTR("Updated login to \"%s\"."), settings.login);
+      }
     break;
-      case 2: // password
+      case 2: { // password
         wifiManager.server->arg(i).toCharArray(settings.password, AUTHBASIC_LEN_PASSWORD);
         logger.info(PSTR("Updated password."));
+      }
     break;
-      case 3: // serial
+      case 3: { // serial
         settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
         logger.info(PSTR("Updated serial to %.5s."), bool2str(settings.flags.serial));
+      }
+    break;
+      case 4: { // wifimanager_portal
+        settings.flags.wifimanager_portal = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        logger.info(PSTR("Updated wifimanager_portal to %.5s."), bool2str(settings.flags.wifimanager_portal));
+      }
+    break;
+      case 5: { // webservice
+        settings.flags.webservice = wifiManager.server->arg(i).equalsIgnoreCase("true");
+        logger.info(PSTR("Updated webservice to %.5s."), bool2str(settings.flags.webservice));
+      }
     break;
     }
   }
@@ -159,7 +176,7 @@ return;
   //saveSettings(settings);
   
   // Send response now
-  wifiManager.server->send(200, "text/plain", F("Reset OK"));
+  wifiManager.server->send(200, CT_TEXT, F("Reset OK"));
 
   myLoopState = EEPROM_DESTROY_CRC;
 }
@@ -178,7 +195,7 @@ return;
   // Check if args have been supplied
   // Check if requested arg has been suplied
   if (wifiManager.server->args() != 1 || wifiManager.server->argName(0) != "mode") {
-    wifiManager.server->send(400, "text/plain", F("Invalid parameter\r\n"));
+    wifiManager.server->send(400, CT_TEXT, F("Invalid parameter\r\n"));
 return;
   }
 
@@ -189,7 +206,7 @@ return;
   } else if (value.equalsIgnoreCase("off")) {
     requestedMode = MODE_OFF;
   } else {
-    wifiManager.server->send(400, "text/plain", "Invalid value: " + value + "\r\n");
+    wifiManager.server->send(400, CT_TEXT, "Invalid value: " + value + "\r\n");
 return;
   } 
 
@@ -235,7 +252,7 @@ void setup_web_handlers(size_t channel_count) {
   }
   /* wifiManager can do better.
   wifiManager.server->onNotFound([]() {
-    wifiManager.server->send(404, "text/plain", F("Not found\r\n"));
+    wifiManager.server->send(404, CT_TEXT, F("Not found\r\n"));
   });
   */
 }
