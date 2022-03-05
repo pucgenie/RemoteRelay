@@ -169,49 +169,50 @@ return;
         }
         // # error ERROR ST_SETTINGS members changed unpredictably
       }
-      for (int i = offsetof(ST_SETTINGS, password) - offsetof(ST_SETTINGS, login); i --> 0; ++ptr) {
-        if ((*ptr) != 0) {
-          (*ptr) = 0;
-          found = true;
-      break;
+      static const uint16_t OVERWRITABLE_BYTES[] = {
+        offsetof(ST_SETTINGS, password) - offsetof(ST_SETTINGS, login),
+        offsetof(ST_SETTINGS, ssid) - offsetof(ST_SETTINGS, password),
+        offsetof(ST_SETTINGS, wpa_key) - offsetof(ST_SETTINGS, ssid),
+        offsetof(ST_SETTINGS, erase_cycles) - offsetof(ST_SETTINGS, wpa_key),
+      };
+      {
+        bool string_terminator_found;
+        byte owf_i = sizeof(OVERWRITABLE_BYTES);
+        while ((!found) && (owf_i --> 0)) {
+          string_terminator_found = false;
+          for (int i = OVERWRITABLE_BYTES[owf_i]; i --> 0; ++ptr) {
+            if ((*ptr) == 0) {
+              string_terminator_found = true;
+            } else {
+              if (string_terminator_found) {
+                (*ptr) = 0;
+                found = true;
+          break;
+              }
+            }
+          }
         }
-      }
-      if (!found) {
-        for (int i = offsetof(ST_SETTINGS, ssid) - offsetof(ST_SETTINGS, password); i --> 0; ++ptr) {
-          if ((*ptr) != 0) {
-            (*ptr) = 0;
-            found = true;
-        break;
+        // don't touch ST_SETTINGS.erase_cycles
+        if (!found) {
+           // FIXME: erase
+           while (true) {
+            led_scream(0b11101110);
           }
         }
       }
-      if (!found) {
-        for (int i = offsetof(ST_SETTINGS, wpa_key) - offsetof(ST_SETTINGS, ssid); i --> 0; ++ptr) {
-          if ((*ptr) != 0) {
-            (*ptr) = 0;
-            found = true;
-        break;
-          }
-        }
+    } else {
+      // Arduino.h byte is unsigned
+      byte i = 0b10000000;
+      while (i > 0 && (crc & i) == 0) {
+        i >>= 1;
       }
-      if (!found)  
-       // FIXME: erase
-       while (true) {
-        led_scream(0b11101110);
-      }
+      //assert i != 0;
+      crc ^= i;
+      // it can't possibly happen that it doesn't find a bit because 0 case was handled before.
+      EEPROM.write(old_addr + sizeof(struct ST_SETTINGS), crc);
     }
-  } else {
-    // Arduino.h byte is unsigned
-    byte i = 0b10000000;
-    while (i > 0 && (crc & i) == 0) {
-      i >>= 1;
-    }
-    //assert i != 0;
-    crc ^= i;
-    // it can't possibly happen that it doesn't find a bit because 0 case was handled before.
-    EEPROM.write(old_addr + sizeof(struct ST_SETTINGS), crc);
+    EEPROM.put(old_addr, tmp_settings);
   }
-  EEPROM.put(old_addr, tmp_settings);
 }
 
 void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset) {
