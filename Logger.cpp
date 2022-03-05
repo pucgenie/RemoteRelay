@@ -58,25 +58,30 @@ void Logger::info(PGM_P fmt, ...) {
   va_end(ap);
 }
 
-void Logger::log(PGM_P fmt, va_list ap) {
-  // Generate log message (does not support float)
-  vsnprintf_P(buffer, BUF_LEN, fmt, ap);
 
+void Logger::logNow(const char* p_buffer) {
   // Add timestamp header
   uint32_t uptime = millis();
   // pucgenie: don't use F() here.
-  snprintf(ringlog[index], BUF_LEN, "[%04d.%03d] %s", uptime / 1000, uptime % 1000, buffer);
-
+  snprintf(ringlog[index], BUF_LEN, "[%04d.%03d] ", uptime / 1000, uptime % 1000);
+  strncpy(ringlog[index] + 11, p_buffer, BUF_LEN - 11);
+  
   if (enableSerial) {
     Serial.println(ringlog[index]);
   }
-
+  
   // Loop over at the begining of the ring
   if (++index >= RINGLOG_SIZE) {
     index = 0;
   }
 }
-  
+
+void Logger::log(PGM_P fmt, va_list ap) {
+  // Generate log message (does not support float)
+  vsnprintf_P(buffer, BUF_LEN, fmt, ap);
+  logNow(buffer);
+}
+
 String Logger::getLog() {
   // Get uptime
   char uptime[9];

@@ -26,7 +26,6 @@
 
 #include "divideandconquer.h"
 
-static PGM_P CT_TEXT PROGMEM = "text/plain";
 static PGM_P CT_JSON PROGMEM = "application/json";
 
 // pucgenie: Don't use F() here
@@ -72,7 +71,7 @@ void handleGETDebug() {
 return;
   }
  
-  wifiManager.server->send(200, FPSTR(CT_TEXT), logger.getLog());
+  wifiManager.server->send(200, "text/plain", logger.getLog());
 }
 
 /**
@@ -82,8 +81,11 @@ void handleGETSettings() {
   if (!isAuthBasicOK()) {
 return;
   }
+  // stack, no fragmentation
+  char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
-  wifiManager.server->send(200, FPSTR(CT_JSON), buffer);
+  
+  wifiManager.server->send(200, String(FPSTR(CT_JSON)).c_str(), buffer);
 }
 
 
@@ -100,7 +102,7 @@ return;
   }
   // Check if args have been supplied
   if (wifiManager.server->args() == 0) {
-    wifiManager.server->send(400, FPSTR(CT_TEXT), F("Invalid parameters\r\n"));
+    wifiManager.server->send(400, "text/plain", F("Invalid parameters\r\n"));
 return;
   }
 
@@ -109,7 +111,7 @@ return;
     String param = wifiManager.server->argName(i);
     switch (binarysearchString(WebParam, param)) {
       default:
-        wifiManager.server->send(400, FPSTR(CT_TEXT), "Unknown parameter: " + param + "\r\n");
+        wifiManager.server->send(400, "text/plain", "Unknown parameter: " + param + "\r\n");
 return;
       case 0: // debug
         settings.flags.debug = wifiManager.server->arg(i).equalsIgnoreCase("true");
@@ -134,8 +136,10 @@ return;
   saveSettings(settings);
 
   // Reply with current settings
+  // stack, no fragmentation
+  char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
-  wifiManager.server->send(201, FPSTR(CT_JSON), buffer);
+  wifiManager.server->send(201, String(FPSTR(CT_JSON)).c_str(), buffer);
 }
 
 /**
@@ -154,11 +158,10 @@ return;
   // Don't write default settings in EEPROM flash...
   //saveSettings(settings);
   
-  eeprom_destroy_crc();
   // Send response now
-  wifiManager.server->send(200, FPSTR(CT_TEXT), F("Reset OK"));
+  wifiManager.server->send(200, "text/plain", F("Reset OK"));
 
-  //myLoopState = EEPROM_DESTROY_CRC;
+  myLoopState = EEPROM_DESTROY_CRC;
 }
 
 /**
@@ -175,7 +178,7 @@ return;
   // Check if args have been supplied
   // Check if requested arg has been suplied
   if (wifiManager.server->args() != 1 || wifiManager.server->argName(0) != "mode") {
-    wifiManager.server->send(400, FPSTR(CT_TEXT), F("Invalid parameter\r\n"));
+    wifiManager.server->send(400, "text/plain", F("Invalid parameter\r\n"));
 return;
   }
 
@@ -186,7 +189,7 @@ return;
   } else if (value.equalsIgnoreCase("off")) {
     requestedMode = MODE_OFF;
   } else {
-    wifiManager.server->send(400, FPSTR(CT_TEXT), "Invalid value: " + value + "\r\n");
+    wifiManager.server->send(400, "text/plain", "Invalid value: " + value + "\r\n");
 return;
   } 
 
@@ -195,8 +198,10 @@ return;
   yield();
 
   setChannel(channel, requestedMode);
+  // stack, no fragmentation
+  char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wifiManager.server->send(200, FPSTR(CT_JSON), buffer);
+  wifiManager.server->send(200, String(FPSTR(CT_JSON)).c_str(), buffer);
 }
 
 /**
@@ -206,8 +211,10 @@ void handleGETChannel(uint8_t channel) {
   if (!isAuthBasicOK()) {
 return;
   }
+  // stack, no fragmentation
+  char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wifiManager.server->send(200, FPSTR(CT_JSON), buffer);
+  wifiManager.server->send(200, String(FPSTR(CT_JSON)).c_str(), buffer);
 }
 
 void setup_web_handlers(size_t channel_count) {
@@ -228,7 +235,7 @@ void setup_web_handlers(size_t channel_count) {
   }
   /* wifiManager can do better.
   wifiManager.server->onNotFound([]() {
-    wifiManager.server->send(404, FPSTR(CT_TEXT), F("Not found\r\n"));
+    wifiManager.server->send(404, "text/plain", F("Not found\r\n"));
   });
   */
 }

@@ -45,6 +45,7 @@ class Logger {
     
     void info(PGM_P, ...);     // Print and store message log
     void debug(PGM_P, ...);    // Print and store message log if debug mode is enabled
+    void logNow(const char*); // Print and store message log, no additional formatting.
     void setSerial(bool);             // Enable log output on serial port
     void setDebug(bool);              // Enable debug log output
     String getLog(void);              // Return the current log
