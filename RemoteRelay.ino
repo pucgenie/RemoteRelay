@@ -330,18 +330,18 @@ void setup()  {
 
 void loop() {
   switch (myLoopState) {
-    #ifndef DISABLE_NUVOTON_AT_REPLIES
     // TODO: missing something?
-    // wait for serial commands
     case AFTER_SETUP:
+      #ifndef DISABLE_NUVOTON_AT_REPLIES
+      // wait for serial commands
       // TODO: light sleep and ignore "AT"/react on "+" (parsing serial input)?
       // handled in any case after switch
+      #endif
     break;
-    #endif
     // pucgenie: fully implemented
     case SHUTDOWN_REQUESTED:
-      myLoopState = SHUTDOWN_HALT;
       delay(3000);
+      myLoopState = SHUTDOWN_HALT;
     break;
     // pucgenie: fully implemented
     case SHUTDOWN_HALT:
@@ -351,12 +351,17 @@ void loop() {
     case ERASE_EEPROM:
       // spi_flash_geometry.h, FLASH_SECTOR_SIZE 0x1000
       // TODO: implement it?
+      
+      myLoopState = AFTER_SETUP;
     break;
     //FIXME: implement!
     case RESTORE:
+      // TODO
     break;
     //FIXME: implement!
     case RESET:
+      // TODO
+      myLoopState = AFTER_SETUP;
     break;
     default:
       logger.info(PSTR("{'LoopState': 'invalid'}"));
@@ -368,6 +373,10 @@ void loop() {
       myLoopState = AFTER_SETUP;
     }
     break;
+    case SAVE_SETTINGS:
+      saveSettings(settings, settings_offset);
+      myLoopState = AFTER_SETUP;
+    break;
   }
 
   switch (myWiFiState) {
@@ -375,6 +384,7 @@ void loop() {
     case AP_REQUESTED:
       wifiManager.setCaptivePortalEnable(true);
       wifiManager.startConfigPortal();
+      myWiFiState = AP_MODE;
     break;
     // TODO: missing WiFiManager portal disable feature
     case STA_REQUESTED: {
@@ -429,6 +439,7 @@ void loop() {
 
       wifiManager.startWebPortal();
       logger.info(PSTR("{'HTTPServer': 'started'}"));
+      
       myWebState = WEB_FULL;
     break;
     //TODO

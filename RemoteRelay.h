@@ -104,6 +104,7 @@ enum MyLoopState {
   // AT+RST received (when switching AT+CWMODE. nuvoTon tries up to 3 times about every 28 seconds)
   RESET,
   EEPROM_DESTROY_CRC,
+  SAVE_SETTINGS,
 };
 
 enum MyWiFiState {
@@ -139,7 +140,7 @@ extern MyWebState myWebState;
 extern WiFiManager wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
-void saveSettings(struct ST_SETTINGS &p_settings);
+void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset);
 void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.
 //bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &out_address);

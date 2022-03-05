@@ -133,7 +133,7 @@ return;
     }
   }
 
-  saveSettings(settings);
+  myLoopState = SAVE_SETTINGS;
 
   // Reply with current settings
   // stack, no fragmentation
