@@ -120,23 +120,23 @@ return;
       }
       case 0: { // debug
         settings.flags.debug = wifiManager.server->arg(i).equalsIgnoreCase("true");
-        logger.info(PSTR("Updated debug to %.5s."), bool2str(settings.flags.debug));
+        logger.info(F("{'updated_debug': %.5s}"), bool2str(settings.flags.debug));
       }
     break;
       case 1: { // login
         wifiManager.server->arg(i).toCharArray(settings.login, AUTHBASIC_LEN_USERNAME);
-        logger.info(PSTR("Updated login to \"%s\"."), settings.login);
+        logger.info(F("{'updated_login': '%s}"), settings.login);
       }
     break;
       case 2: { // password
         wifiManager.server->arg(i).toCharArray(settings.password, AUTHBASIC_LEN_PASSWORD);
-        logger.info(PSTR("Updated password."));
+        logger.info(F("{'updated_password': '%s'}"), settings.password);
       }
     break;
       case 3: { // serial
         settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
-        logger.info(PSTR("Updated serial to %.5s."), bool2str(settings.flags.serial));
+        logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
       case 4: { // wifimanager_portal
@@ -145,7 +145,7 @@ return;
           // FIXME: stop or start it
         }
         settings.flags.wifimanager_portal = newSetting;
-        logger.info(PSTR("Updated wifimanager_portal to %.5s."), bool2str(settings.flags.wifimanager_portal));
+        logger.info(F("{'updated_wifimanager_portal': %.5s}"), bool2str(settings.flags.wifimanager_portal));
       }
     break;
       case 5: { // webservice
@@ -154,18 +154,18 @@ return;
           // FIXME: stop or start it
         }
         settings.flags.webservice = newSetting;
-        logger.info(PSTR("Updated webservice to %.5s."), bool2str(settings.flags.webservice));
+        logger.info(F("{'updated_webservice': %.5s}"), bool2str(settings.flags.webservice));
       }
     break;
       case 6: { // ssid
         wifiManager.server->arg(i).toCharArray(settings.ssid, AUTHBASIC_LEN_PASSWORD);
-        logger.info(PSTR("Updated serial to %.5s."), bool2str(settings.flags.serial));
+        logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
       case 7: { // wpa_key
         settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
-        logger.info(PSTR("Updated serial to %.5s."), bool2str(settings.flags.serial));
+        logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
     }
@@ -188,7 +188,7 @@ void handlePOSTReset() {
 return;
   }
   
-  logger.info(PSTR("Reset settings to default"));
+  logger.info(F("{'action': 'reset settings'}"));
 
   wifiManager.resetSettings();
   //setDefaultSettings(settings);

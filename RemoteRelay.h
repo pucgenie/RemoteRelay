@@ -95,8 +95,10 @@ enum MyLoopState {
   AFTER_SETUP,
   // delayed shutdown
   SHUTDOWN_REQUESTED,
+  RESTART_REQUESTED,
   // shutdown now
   SHUTDOWN_HALT,
+  SHUTDOWN_RESTART,
   // write all 1s to used EEPROM flash page. If it was bitwise EEPROM, would have just stored an invalid CRC value instead.
   ERASE_EEPROM,
   // AT+RESTORE received
@@ -140,7 +142,7 @@ extern MyWebState myWebState;
 extern WiFiManager wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
-void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset);
+//void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset);
 void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.
 //bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &out_address);

@@ -27,6 +27,11 @@
 
 #include <spi_flash.h>
 #include <EEPROM.h>
+#include <Pinger.h>
+extern "C"
+{
+  #include <lwip/icmp.h> // needed for icmp packet definitions
+}
 
 #include "RemoteRelay.h"
 char buffer[BUF_SIZE];
@@ -46,6 +51,8 @@ MyLoopState myLoopState = AFTER_SETUP;
 MyWiFiState myWiFiState = MYWIFI_OFF;
 MyWebState myWebState = WEB_DISABLED;
 WiFiManager wifiManager;
+static Pinger pinger;
+static const ____FlashStringHelper *serial_response_next = null;
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
 static ATReplies atreplies = ATReplies();
@@ -58,7 +65,7 @@ static uint8_t channels[] = {
   , MODE_OFF
   , MODE_OFF
 #endif
-                      };
+};
 
 //assert sizeof(channels) <= 9: "print functions are restricted to one-digit channel count"
 
@@ -119,7 +126,7 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     }
   }
   if (!ret) {
-    logger.info(PSTR("{'settings': 'loading default'}"));
+    logger.info(F("{'settings': 'loading default'}"));
     //setDefaultSettings(p_settings);
     strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME+1);
     strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD+1);
@@ -128,13 +135,15 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     p_settings.flags.wearlevel_mark = ~0;
     p_settings.flags.debug = false;
     p_settings.flags.serial = false;
+    p_settings.flags.wifimanager_portal = true;
+    p_settings.flags.webservice = true;
     
     led_scream(0b10101010);
     
     the_address = 0;
   } else {
     // serial is disabled by default, so spare us another if after setting
-    logger.info(PSTR("Loaded settings from flash"));
+    logger.info(F("{'settings': 'loaded from flash'}"));
   }
   // could have changed
   logger.setSerial(p_settings.flags.serial);
@@ -262,8 +271,8 @@ void setChannel(uint8_t channel, uint8_t mode) {
   // Save status 
   channels[channel - 1] = mode;
   
-  logger.info(PSTR("Channel %.1i switched to %.3s"), channel, (mode == MODE_ON) ? "on" : "off");
-  logger.debug(PSTR("Sending payload %02X%02X%02X%02X"), payload[0], payload[1], payload[2], payload[3]);
+  logger.info(F("{'channel': %.1i, 'state': '%.3s'}"), channel, (mode == MODE_ON) ? "on" : "off");
+  logger.debug(F("{'payload': '%02X%02X%02X%02X'}"), payload[0], payload[1], payload[2], payload[3]);
   
   // Give some time to the watchdog
   ESP.wdtFeed();
@@ -297,7 +306,7 @@ void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
   );
 }
 
-void configModeCallback (WiFiManager *myWiFiManager) {
+void configModeCallback(WiFiManager *myWiFiManager) {
   
 }
 
@@ -307,22 +316,109 @@ void setup()  {
   
   // Load settigns from flash
   if (loadSettings(settings, settings_offset)) {
-    logger.info(PSTR("{'RemoteRelay': '%s'}"), VERSION);
+    logger.info(F("{'RemoteRelay': '%s'}"), VERSION);
   } else {
-    logger.info(PSTR("{'RemoteRelay': '%s', 'mode': 'failsafe'}"), VERSION);
+    logger.info(F("{'RemoteRelay': '%s', 'mode': 'failsafe'}"), VERSION);
   }
   // nop - don't need to save defaults in error case because they can be restored anytime. Save write cycles.
   
-  // Is a setter without unwanted side-effects.
+  // These are setters without unwanted side-effects.
   wifiManager.setConfigPortalBlocking(false);
+  wifiManager.setRemoveDuplicateAPs(true);
 
   // Be sure the relay are in the default state (off)
   for (uint8_t i = sizeof(channels); i > 0; ) {
     setChannel(i, channels[--i]);
   }
 
+  // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
+  // Configure custom parameters
+  WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
+  WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/);
+  WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, LENGTH_SSID);
+  WiFiManagerParameter http_wpa_key("ht2wpa_key", "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY);
+  wifiManager.setSaveConfigCallback([](){
+    shouldSaveConfig = true;
+  });
+  wifiManager.addParameter(&http_login);
+  wifiManager.addParameter(&http_password);
+  wifiManager.addParameter(&http_ssid);
+  wifiManager.addParameter(&http_wpa_key);
+  
+  wifiManager.setAPCallback(configModeCallback);
+
+  pinger.OnReceive([](const PingerResponse& response)
+  {
+    if (response.ReceivedResponse) {
+      Serial.printf(
+        "Reply from %s: bytes=%d time=%lums TTL=%d\n",
+        response.DestIPAddress.toString().c_str(),
+        response.EchoMessageSize - sizeof(struct icmp_echo_hdr),
+        response.ResponseTime,
+        response.TimeToLive);
+    } else {
+      Serial.printf("Request timed out.\n");
+    }
+
+    // Return true to continue the ping sequence.
+    // If current event returns false, the ping sequence is interrupted.
+    return true;
+  });
+
+  pinger.OnEnd([](const PingerResponse& response)
+  {
+    // Evaluate lost packet percentage
+    float loss = 100;
+    if(response.TotalReceivedResponses > 0)
+    {
+      loss = (response.TotalSentRequests - response.TotalReceivedResponses) * 100 / response.TotalSentRequests;
+    }
+    
+    // Print packet trip data
+    Serial.printf(
+      "Ping statistics for %s:\n",
+      response.DestIPAddress.toString().c_str());
+    Serial.printf(
+      "    Packets: Sent = %lu, Received = %lu, Lost = %lu (%.2f%% loss),\n",
+      response.TotalSentRequests,
+      response.TotalReceivedResponses,
+      response.TotalSentRequests - response.TotalReceivedResponses,
+      loss);
+
+    // Print time information
+    if(response.TotalReceivedResponses > 0)
+    {
+      Serial.printf("Approximate round trip times in milli-seconds:\n");
+      Serial.printf(
+        "    Minimum = %lums, Maximum = %lums, Average = %.2fms\n",
+        response.MinResponseTime,
+        response.MaxResponseTime,
+        response.AvgResponseTime);
+    }
+    
+    // Print host data
+    Serial.printf("Destination host data:\n");
+    Serial.printf(
+      "    IP address: %s\n",
+      response.DestIPAddress.toString().c_str());
+    if(response.DestMacAddress != nullptr)
+    {
+      Serial.printf(
+        "    MAC address: " MACSTR "\n",
+        MAC2STR(response.DestMacAddress->addr));
+    }
+    if(response.DestHostname != "")
+    {
+      Serial.printf(
+        "    DNS name: %s\n",
+        response.DestHostname.c_str());
+    }
+
+    return true;
+  });
+
   #ifdef DISABLE_NUVOTON_AT_REPLIES
-  myLoopState = AUTO_REQUESTED;
+  myWiFiState = AUTO_REQUESTED;
   #endif
 }
 
@@ -343,8 +439,20 @@ void loop() {
     }
     break;
     // pucgenie: fully implemented
+    case RESTART_REQUESTED: {
+      delay(3000);
+      myLoopState = SHUTDOWN_RESTART;
+    }
+    break;
+    // pucgenie: fully implemented
     case SHUTDOWN_HALT: {
-      logger.info(PSTR("{'action': 'restarting'}"));
+      logger.info(F("{'action': 'powering down'}"));
+      ESP.deepSleep(0);
+    }
+    break;
+    // pucgenie: fully implemented
+    case SHUTDOWN_RESTART: {
+      logger.info(F("{'action': 'restarting'}"));
       ESP.restart();
     }
     break;
@@ -357,7 +465,7 @@ void loop() {
     }
     break;
     case RESTORE: {
-      logger.info("Received serial restore request, going to destroy settings in EEPROM...");
+      logger.info(F("{'action': 'destroying settings in EEPROM...'}"));
       myLoopState = EEPROM_DESTROY_CRC;
     }
     break;
@@ -368,7 +476,7 @@ void loop() {
     }
     break;
     default: {
-      logger.info(PSTR("{'LoopState': 'invalid'}"));
+      logger.info(F("{'LoopState': 'invalid'}"));
       led_scream(0b10010010);
       myLoopState = SHUTDOWN_REQUESTED;
     }
@@ -377,10 +485,11 @@ void loop() {
       eeprom_destroy_crc(settings_offset);
       // where to commit then?
       EEPROM.commit();
-      myLoopState = AFTER_SETUP;
+      myLoopState = RESTART_REQUESTED;
     }
     break;
     case SAVE_SETTINGS: {
+      shouldSaveConfig = false;
       saveSettings(settings, settings_offset);
       myLoopState = AFTER_SETUP;
     }
@@ -388,32 +497,25 @@ void loop() {
   }
 
   switch (myWiFiState) {
-    // TODO: missing something?
     case AP_REQUESTED:
+      wifiManager.disconnect();
       wifiManager.setCaptivePortalEnable(true);
-      wifiManager.startConfigPortal();
+      WiFi.mode(WIFI_AP);
+      wifiManager.setEnableConfigPortal(true);
+      wifiManager.setSaveConnect(false);
+      wifiManager.startConfigPortal(settings.ssid, settings.wpa_key);
       myWiFiState = AP_MODE;
     break;
-    // TODO: missing WiFiManager portal disable feature
     case STA_REQUESTED: {
-      WiFi.mode(WIFI_STA);
-
+      wifiManager.setCaptivePortalEnable(false);
+      wifiManager.disconnect();
       if (settings.flags.wifimanager_portal) {
-        // Configure custom parameters
-        WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
-        WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD, "type='password'");
-        WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, LENGTH_SSID);
-        wifiManager.setSaveConfigCallback([](){
-          shouldSaveConfig = true;
-        });
-        wifiManager.addParameter(&http_login);
-        wifiManager.addParameter(&http_password);
-        wifiManager.addParameter(&http_ssid);
-        
-        wifiManager.setRemoveDuplicateAPs(false);
-        wifiManager.setAPCallback(configModeCallback);
-        wifiManager.setCaptivePortalEnable(true);
+        wifiManager.setSaveConnect(false);
+        wifiManager.setEnableConfigPortal(true);
+      } else {
+        wifiManager.setEnableConfigPortal(false);
       }
+      WiFi.mode(WIFI_STA);
       // Connect to Wifi or ask for SSID
       bool res = wifiManager.autoConnect(settings.ssid, settings.wpa_key);
       /*
@@ -421,16 +523,34 @@ void loop() {
       wifiManager.startConfigPortal(settings.ssid);
       wifiManager.startWebPortal();
       */
-      myWiFiState = STA_MODE;
+      if (res) {
+        myWiFiState = STA_MODE;
+        serial_response_next = F("WIFI CONNECTED");
+      } else {
+        myWiFiState = MYWIFI_OFF;
+        // dead
+        myLoopState = SHUTDOWN_REQUESTED;
+      }
     }
     break;
     // TODO: missing something?
-    case AUTO_REQUESTED: // fall-through
-    // TODO: missing something?
+    case AUTO_REQUESTED:
+      // STA uses autoConnect at the moment.
+      myWiFiState = STA_REQUESTED;
+    break;
     case AP_MODE:
-    // TODO: missing something?
-    case STA_MODE: // fall-through
-      
+      // FIXME: what to do?
+    break;
+    case STA_MODE:
+      if (WiFi.status() != WL_CONNECTED) {
+        // TODO: connection lost
+      }
+      if (pinger.Ping("technologytourist.com") == false) {
+        
+      }
+      if (pinger.Ping(IPAddress(8,8,8,8)) == false) {
+        
+      }
     break;
   }
 
@@ -438,34 +558,101 @@ void loop() {
     // TODO: don't assume WiFiManager portal is running!
     case WEB_REQUESTED:
       // Display local ip
-      logger.info(PSTR("{'IPAddress': '%s'}"), WiFi.localIP().toString().c_str());
-      
-      setup_web_handlers(sizeof(channels));
-      /* wifiManager handles server
-      server.begin();
-      */
+      logger.info(F("{'IPAddress': '%s'}"), WiFi.localIP().toString().c_str());
 
-      wifiManager.startWebPortal();
-      logger.info(PSTR("{'HTTPServer': 'started'}"));
+      if (settings.flags.webservice) {
+        setup_web_handlers(sizeof(channels));
+        /* wifiManager handles server
+        server.begin();
+        */
+      }
+      
+      if (settings.flags.wifimanager_portal || (myWiFiState == AP_MODE && (!settings.flags.webservice))) {
+        wifiManager.startWebPortal();
+        serial_response_next = F("WIFI GOT IP");
+      }
+      logger.info(F("{'HTTPServer': 'started'}"));
       
       myWebState = WEB_FULL;
     break;
-    //TODO
-    case WEB_FULL:
-    //TODO
-    case WEB_CONFIG:
-    case WEB_REST:
+    case WEB_FULL: // fall-through
+    case WEB_CONFIG: // fall-through
+    case WEB_REST: // fall-through
       /* now handled by wifiManager portal server service
       server.handleClient();
       */
       wifiManager.process();
+      if (shouldSaveConfig) {
+        myLoopState = SAVE_SETTINGS;
+      }
+    break;
+    default: {
+      
+    }
     break;
   }
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
-  // pretend to be an AT device here
-  if (Serial.available()) {
-    atreplies.handle_nuvoTon_comms(logger);
+  if (myLoopState == AFTER_SETUP) {
+    // don't accept serial commands if some action is queued. We have enought time to react at next loop iteration.
+    static MyATCommand at_previous = INVALID_EXPECTED_AT, at_current;
+    // pretend to be an AT device here
+    if (Serial.available()) {
+      switch (at_current = atreplies.handle_nuvoTon_comms(logger)) {
+        AT_RESTORE: {
+          myLoopState = RESTORE;
+        }
+        break;
+        AT_RST: {
+          myLoopState = RESET;
+        }
+        break;
+        AT_CWMODE_1: {
+          if (at_previous != AT_CWMODE_1) {
+            if (myWiFiState == STA_MODE) {
+              logger.logNow("{'myWiFiMode': 'unexpected state'}");
+            }
+            myWiFiState = STA_REQUESTED;
+          }
+        }
+        break;
+        AT_CWMODE_2: {
+          if (at_previous != AT_CWMODE_2) {
+            myWiFiState = AP_REQUESTED;
+          }
+        }
+        break;
+        AT_CWSTARTSMART: {
+          
+        }
+        break;
+        AT_CWSMARTSTART_1: {
+          
+        }
+        break;
+        AT_CIPMUX_1: {
+          
+        }
+        break;
+        AT_CIPSERVER: {
+          myWebState = WEB_REQUESTED;
+        }
+        break;
+        AT_CIPSTO: {
+          
+        }
+        break;
+        default: {
+          
+        }
+        break;
+        INVALID_EXPECTED_AT: {
+          
+        }
+        break;
+      }
+      at_previous = at_current;
+    }
   }
 #endif
 }

@@ -41,7 +41,7 @@ void Logger::setSerial(bool d) {
   enableSerial = d;
 }
 
-void Logger::debug(PGM_P fmt, ...) {
+void Logger::debug(const __FlashStringHelper * fmt, ...) {
   if (!enableDebug) {
 return;
   }
@@ -51,7 +51,7 @@ return;
   va_end(ap);
 }
 
-void Logger::info(PGM_P fmt, ...) {
+void Logger::info(const __FlashStringHelper * fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   log(fmt, ap);
@@ -76,9 +76,9 @@ void Logger::logNow(const char* p_buffer) {
   }
 }
 
-void Logger::log(PGM_P fmt, va_list ap) {
+void Logger::log(const __FlashStringHelper * fmt, va_list ap) {
   // Generate log message (does not support float)
-  vsnprintf_P(buffer, BUF_LEN, fmt, ap);
+  vsnprintf_P(buffer, BUF_LEN, reinterpret_cast<PGM_P>(fmt), ap);
   logNow(buffer);
 }
 

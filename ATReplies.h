@@ -25,13 +25,27 @@
 #include "Arduino.h"
 #include "Logger.h"
 
+enum MyATCommand {
+  AT_RESTORE,
+  AT_RST,
+  AT_CWMODE_1,
+  AT_CWMODE_2,
+  AT_CWSTARTSMART,
+  AT_CWSMARTSTART_1,
+  AT_CIPMUX_1,
+  AT_CIPSERVER,
+  AT_CIPSTO,
+  INVALID_EXPECTED_AT,
+};
+
 // TODO: pucgenie: Handle the exact commands.
 class ATReplies {
   private:
     static int cwmode;
     
   public:
-    static void handle_nuvoTon_comms(Logger &logger);
+    static MyATCommand handle_nuvoTon_comms(Logger &logger);
+    static void answer_ok(Logger &logger);
     
 };
 

@@ -62,25 +62,47 @@
    AT+RESTORE
  * Then continues exactly like CWMODE=2 (and changes to red led)
  * 
+ * 
+ * === Other commands found in original firmware
+ * AT+CWJAP:%d
+ * AT+CIPUPDATE:2
+ * AT+CIPUPDATE:3
+ * AT+CIPUPDATE:4
+ * AT+GMR
+ * AT+PING
+ * AT+SLEEP
+ * ...
  */
 
-void ATReplies::handle_nuvoTon_comms(Logger &logger) {
+MyATCommand ATReplies::handle_nuvoTon_comms(Logger &logger) {
+  // Let's hope that communication doesn't get interrupted and that it doesn't take too long.
   String stringIn = Serial.readStringUntil('\r');
-  Serial.flush(); // flush what's left '\n'?
-
-  if (charnonempty(stringIn)) {
-    logger.debug(PSTR("Serial received: %s"), stringIn);
-
-    if (stringIn.indexOf("AT+") > -1) {
-      Serial.println("OK");
-    }
-
-    if (stringIn.indexOf("AT+RST") > -1) {
-      // pretend we reset (wait a bit then send the WiFi connected message)
+  int after_data;
+  while ((after_data = Serial.read()) != '\n') {
+    if (after_data == -1) {
       delay(10);
-      Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
+  continue;
     }
-
-    // Button2: AT+RESTORE und komplette Initialisierung
+    logger.debug(F("{'unknown_input': '%c'}"), after_data);
   }
+  if (stringIn.length() == 0) {
+    logger.logNow("{'error': 'empty line on serial encountered'}");
+return INVALID_EXPECTED_AT;
+  }
+  logger.debug(F("{'Serial_received': '%s'}"), stringIn);
+
+  if (stringIn.indexOf("AT+RST") != -1) {
+    // pretend we reset (wait a bit then send the WiFi connected message)
+    delay(10);
+    Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
+  }
+  if (stringIn.indexOf("AT+") > -1) {
+    
+  }
+  // FIXME: just to compile now. REMOVE THIS!
+  return AT_RST;
+}
+
+void ATReplies::answer_ok(Logger &logger) {
+  Serial.println("OK");
 }

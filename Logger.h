@@ -43,8 +43,8 @@ class Logger {
   
     Logger();
     
-    void info(PGM_P, ...);     // Print and store message log
-    void debug(PGM_P, ...);    // Print and store message log if debug mode is enabled
+    void info(const __FlashStringHelper *, ...);     // Print and store message log
+    void debug(const __FlashStringHelper *, ...);    // Print and store message log if debug mode is enabled
     void logNow(const char*); // Print and store message log, no additional formatting.
     void setSerial(bool);             // Enable log output on serial port
     void setDebug(bool);              // Enable debug log output
@@ -52,7 +52,7 @@ class Logger {
   
   private:
   
-    void log(PGM_P, va_list);
+    void log(const __FlashStringHelper *, va_list);
     
 };
 
