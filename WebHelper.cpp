@@ -29,26 +29,35 @@
 static PGM_P CT_JSON PROGMEM = "application/json";
 static const char* CT_TEXT = "text/plain";
 
-// pucgenie: Don't use F() here
-static const String WebParam[] = {
-    "debug"
-  , "login"
-  , "password"
-  , "serial"
-  , "wifimanager_portal"
-  , "webservice"
-  , "ssid"
-  , "wpa_key"
+// define enum stringlist https://stackoverflow.com/a/10966395
+#define FOREACH_FRUIT(FRUIT)      \
+        FRUIT(debug)              \
+        FRUIT(login)              \
+        FRUIT(password)           \
+        FRUIT(serial)             \
+        FRUIT(ssid)               \
+        FRUIT(webservice)         \
+        FRUIT(wifimanager_portal) \
+        FRUIT(wpa_key)            \
+
+#define GENERATE_ENUM(ENUM) WEB_PARAM_##ENUM,
+#define GENERATE_STRING(STRING) #STRING,
+
+enum ENUM_WEB_PARAM {
+    FOREACH_FRUIT(GENERATE_ENUM)
 };
 
-// pucgenie: We need the memory in any case because there is no path tree parser...
-// pucgenie: Don't use F() here.
-static const char *channelPath[] = {
-    "/channel/1"
-  , "/channel/2"
+static const char *WEB_PARAM[] = {
+    FOREACH_FRUIT(GENERATE_STRING)
+};
+
+// pucgenie: ESP8266WebServer::on copies the string anyways
+static const __FlashStringHelper *channelPath[] = {
+    F("/channel/1")
+  , F("/channel/2")
 #ifdef FOUR_WAY_MODE
-  , "/channel/3"
-  , "/channel/4"
+  , F("/channel/3")
+  , F("/channel/4")
 #endif
 };
 
@@ -78,6 +87,12 @@ return;
   wifiManager.server->send(200, CT_TEXT, logger.getLog());
 }
 
+inline void wm_sendbuffer(int x, const __FlashStringHelper *ct) {
+  char ct_tmp[sizeof(ct) / sizeof(ct[0])];
+  strcpy_P(ct_tmp, ct);
+  wifiManager.server->send(x, ct_tmp, buffer);
+}
+
 /**
  * GET /settings
  */
@@ -89,7 +104,7 @@ return;
   char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
   
-  wifiManager.server->send(200, String(FPSTR(CT_JSON)).c_str(), buffer);
+  wm_sendbuffer(200, FPSTR(CT_JSON));
 }
 
 
@@ -118,28 +133,29 @@ return;
         wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
 return;
       }
-      case 0: { // debug
+            FIXME: use enum stringlist macro
+      case WEB_PARAM_debug: { // debug
         settings.flags.debug = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.info(F("{'updated_debug': %.5s}"), bool2str(settings.flags.debug));
       }
     break;
-      case 1: { // login
+      case WEB_PARAM_login: { // login
         wifiManager.server->arg(i).toCharArray(settings.login, AUTHBASIC_LEN_USERNAME);
         logger.info(F("{'updated_login': '%s}"), settings.login);
       }
     break;
-      case 2: { // password
+      case WEB_PARAM_password: { // password
         wifiManager.server->arg(i).toCharArray(settings.password, AUTHBASIC_LEN_PASSWORD);
         logger.info(F("{'updated_password': '%s'}"), settings.password);
       }
     break;
-      case 3: { // serial
+      case WEB_PARAM_serial: { // serial
         settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
         logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
-      case 4: { // wifimanager_portal
+      case WEB_PARAM_wifimanager_portal: { // 
         bool newSetting = wifiManager.server->arg(i).equalsIgnoreCase("true");
         if (settings.flags.wifimanager_portal != newSetting) {
           // FIXME: stop or start it
@@ -148,7 +164,7 @@ return;
         logger.info(F("{'updated_wifimanager_portal': %.5s}"), bool2str(settings.flags.wifimanager_portal));
       }
     break;
-      case 5: { // webservice
+      case WEB_PARAM_webservice: { // 
         bool newSetting = wifiManager.server->arg(i).equalsIgnoreCase("true");
         if (settings.flags.webservice != newSetting) {
           // FIXME: stop or start it
@@ -157,12 +173,12 @@ return;
         logger.info(F("{'updated_webservice': %.5s}"), bool2str(settings.flags.webservice));
       }
     break;
-      case 6: { // ssid
+      case WEB_PARAM_ssid: { // 
         wifiManager.server->arg(i).toCharArray(settings.ssid, AUTHBASIC_LEN_PASSWORD);
         logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
-      case 7: { // wpa_key
+      case WEB_PARAM_wpa_key: { // 
         settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
         logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
@@ -177,7 +193,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
-  wifiManager.server->send(201, String(FPSTR(CT_JSON)).c_str(), buffer);
+  wm_sendbuffer(201, FPSTR(CT_JSON));
 }
 
 /**
@@ -239,7 +255,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wifiManager.server->send(200, String(FPSTR(CT_JSON)).c_str(), buffer);
+  wm_sendbuffer(200, FPSTR(CT_JSON));
 }
 
 /**
@@ -252,7 +268,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wifiManager.server->send(200, String(FPSTR(CT_JSON)).c_str(), buffer);
+  wm_sendbuffer(200, FPSTR(CT_JSON));
 }
 
 void setup_web_handlers(size_t channel_count) {
