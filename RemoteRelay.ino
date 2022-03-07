@@ -288,12 +288,13 @@ void setChannel(uint8_t channel, uint8_t mode) {
 
 void getJSONSettings(char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s}
+  snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
 )=="==")
     , settings.login
     , bool2str(settings.flags.debug)
     , bool2str(settings.flags.serial)
     , bool2str(settings.flags.webservice)
+    , bool2str(settings.flags.wifimanager_portal)
   );
 }
 
@@ -333,10 +334,11 @@ void setup()  {
 
   // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
   // Configure custom parameters
-  WiFiManagerParameter http_login("htlogin", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
-  WiFiManagerParameter http_password("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/);
-  WiFiManagerParameter http_ssid("ht2ssid", "AP mode SSID", settings.ssid, LENGTH_SSID);
-  WiFiManagerParameter http_wpa_key("ht2wpa_key", "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY);
+  new (&http_login)WiFiManagerParameter ("login", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
+  new (&http_password)WiFiManagerParameter ("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/);
+  new (&http_ssid)WiFiManagerParameter ("ssid", "AP mode SSID", settings.ssid, LENGTH_SSID);
+  new (&http_wpa_key)WiFiManagerParameter ("wpa_key", "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY);
+  new (&http_webservice) WiFiManagerParameter("customfieldid", "Custom Field Label", "Custom Field Value", customFieldLength,"placeholder=\"Custom Field Placeholder\" type=\"checkbox\""); // custom html type
   wifiManager.setSaveConfigCallback([](){
     shouldSaveConfig = true;
   });
