@@ -506,16 +506,15 @@ void loop() {
       wifiManager.startConfigPortal(settings.ssid, settings.wpa_key);
       myWiFiState = AP_MODE;
     break;
-    case STA_REQUESTED: {
-      wifiManager.setCaptivePortalEnable(false);
-      wifiManager.disconnect();
+    case DO_AUTOCONNECT: {
       if (settings.flags.wifimanager_portal) {
         wifiManager.setSaveConnect(false);
         wifiManager.setEnableConfigPortal(true);
       } else {
         wifiManager.setEnableConfigPortal(false);
       }
-      WiFi.mode(WIFI_STA);
+      // FIXME: enable in AP mode
+      //wifiManager.setCaptivePortalEnable(false);
       // Connect to Wifi or ask for SSID
       bool res = wifiManager.autoConnect(settings.ssid, settings.wpa_key);
       /*
@@ -533,10 +532,18 @@ void loop() {
       }
     }
     break;
-    // TODO: missing something?
-    case AUTO_REQUESTED:
-      // STA uses autoConnect at the moment.
-      myWiFiState = STA_REQUESTED;
+    case STA_REQUESTED: {
+      wifiManager.setCaptivePortalEnable(false);
+      wifiManager.disconnect();
+      WiFi.mode(WIFI_STA);
+      myWiFiState = DO_AUTOCONNECT;
+    }
+    break;
+    case AUTO_REQUESTED: {
+      wifiManager.disconnect();
+      WiFi.mode(WIFI_AP_STA);
+      myWiFiState = DO_AUTOCONNECT;
+    }
     break;
     case AP_MODE:
       // FIXME: what to do?
