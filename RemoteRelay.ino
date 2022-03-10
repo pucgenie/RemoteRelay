@@ -42,7 +42,7 @@ char buffer[BUF_SIZE];
 #include "syntacticsugar.h"
 
 //ESP8266WebServer server(80);
-// contained in WiFiManager.server->
+// contained in wifiManager->server->
 
 struct ST_SETTINGS settings;
 Logger logger = Logger();
@@ -50,9 +50,12 @@ bool shouldSaveConfig = false;
 MyLoopState myLoopState = AFTER_SETUP;
 MyWiFiState myWiFiState = MYWIFI_OFF;
 MyWebState myWebState = WEB_DISABLED;
-WiFiManager wifiManager;
+/**
+ * WeFiManagerParameters can't be removed so deleting the whole object is necessary.
+**/
+WiFiManager *wifiManager = new WiFiManager();
 static Pinger pinger;
-static const ____FlashStringHelper *serial_response_next = null;
+static const __FlashStringHelper *serial_response_next = NULL;
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
 static ATReplies atreplies = ATReplies();
@@ -288,7 +291,7 @@ void setChannel(uint8_t channel, uint8_t mode) {
 
 void getJSONSettings(char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
+  int snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
 )=="==")
     , settings.login
     , bool2str(settings.flags.debug)
@@ -296,23 +299,43 @@ void getJSONSettings(char p_buffer[], size_t bufSize) {
     , bool2str(settings.flags.webservice)
     , bool2str(settings.flags.wifimanager_portal)
   );
+  assert(snstatus < 0 || snstatus > bufSize);
 }
 
 void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"channel":%.1i,"mode":"%.3s"}
+  int snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"channel":%.1i,"mode":"%.3s"}
 )=="==")
     , channel
     , (channels[channel - 1] == MODE_ON) ? "on" : "off"
   );
+  assert(snstatus < 0 || snstatus > bufSize);
 }
 
 void configModeCallback(WiFiManager *myWiFiManager) {
   
 }
 
+/**
+ * 
+**/
+void configureWebParams() {
+  static WiFiManagerParameter webparams[] = {
+    WiFiManagerParameter("login",      "HTTP Login",    settings.login, AUTHBASIC_LEN_USERNAME),
+    WiFiManagerParameter("password",   "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/),
+    WiFiManagerParameter("ssid",       "AP mode SSID",  settings.ssid, LENGTH_SSID),
+    WiFiManagerParameter("wpa_key",    "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY),
+    WiFiManagerParameter("webservice", "Webservice", bool2str(settings.flags.webservice), 5, "placeholder=\"webservice\" type=\"checkbox\""),
+    WiFiManagerParameter("wifimanager_portal", "WiFiManager Portal in STA mode", bool2str(settings.flags.wifimanager_portal), 5, "placeholder=\"wifimanager_portal\" type=\"checkbox\""),
+  };
+  for (WiFiManagerParameter &x : webparams) {
+    wifiManager->addParameter(&x);
+  }
+}
+
 void setup()  {
   Serial.begin(115200);
+  
   EEPROM.begin(512);
   
   // Load settigns from flash
@@ -324,8 +347,8 @@ void setup()  {
   // nop - don't need to save defaults in error case because they can be restored anytime. Save write cycles.
   
   // These are setters without unwanted side-effects.
-  wifiManager.setConfigPortalBlocking(false);
-  wifiManager.setRemoveDuplicateAPs(true);
+  wifiManager->setConfigPortalBlocking(false);
+  wifiManager->setRemoveDuplicateAPs(true);
 
   // Be sure the relay are in the default state (off)
   for (uint8_t i = sizeof(channels); i > 0; ) {
@@ -333,21 +356,13 @@ void setup()  {
   }
 
   // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
-  // Configure custom parameters
-  new (&http_login)WiFiManagerParameter ("login", "HTTP Login", settings.login, AUTHBASIC_LEN_USERNAME);
-  new (&http_password)WiFiManagerParameter ("htpassword", "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/);
-  new (&http_ssid)WiFiManagerParameter ("ssid", "AP mode SSID", settings.ssid, LENGTH_SSID);
-  new (&http_wpa_key)WiFiManagerParameter ("wpa_key", "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY);
-  new (&http_webservice) WiFiManagerParameter("customfieldid", "Custom Field Label", "Custom Field Value", customFieldLength,"placeholder=\"Custom Field Placeholder\" type=\"checkbox\""); // custom html type
-  wifiManager.setSaveConfigCallback([](){
+  // Configure custom parameters, store in HEAP (new). Maybe just make them static...
+  configureWebParams();
+  wifiManager->setSaveConfigCallback([](){
     shouldSaveConfig = true;
   });
-  wifiManager.addParameter(&http_login);
-  wifiManager.addParameter(&http_password);
-  wifiManager.addParameter(&http_ssid);
-  wifiManager.addParameter(&http_wpa_key);
   
-  wifiManager.setAPCallback(configModeCallback);
+  wifiManager->setAPCallback(configModeCallback);
 
   pinger.OnReceive([](const PingerResponse& response)
   {
@@ -367,12 +382,10 @@ void setup()  {
     return true;
   });
 
-  pinger.OnEnd([](const PingerResponse& response)
-  {
+  pinger.OnEnd([](const PingerResponse& response) {
     // Evaluate lost packet percentage
     float loss = 100;
-    if(response.TotalReceivedResponses > 0)
-    {
+    if (response.TotalReceivedResponses > 0) {
       loss = (response.TotalSentRequests - response.TotalReceivedResponses) * 100 / response.TotalSentRequests;
     }
     
@@ -388,8 +401,7 @@ void setup()  {
       loss);
 
     // Print time information
-    if(response.TotalReceivedResponses > 0)
-    {
+    if (response.TotalReceivedResponses > 0) {
       Serial.printf("Approximate round trip times in milli-seconds:\n");
       Serial.printf(
         "    Minimum = %lums, Maximum = %lums, Average = %.2fms\n",
@@ -500,33 +512,33 @@ void loop() {
 
   switch (myWiFiState) {
     case AP_REQUESTED:
-      wifiManager.disconnect();
-      wifiManager.setCaptivePortalEnable(true);
+      wifiManager->disconnect();
+      wifiManager->setCaptivePortalEnable(true);
       WiFi.mode(WIFI_AP);
-      wifiManager.setEnableConfigPortal(true);
-      wifiManager.setSaveConnect(false);
-      wifiManager.startConfigPortal(settings.ssid, settings.wpa_key);
+      wifiManager->setEnableConfigPortal(true);
+      wifiManager->setSaveConnect(false);
+      wifiManager->startConfigPortal(settings.ssid, settings.wpa_key);
       myWiFiState = AP_MODE;
     break;
     case DO_AUTOCONNECT: {
       if (settings.flags.wifimanager_portal) {
-        wifiManager.setSaveConnect(false);
-        wifiManager.setEnableConfigPortal(true);
+        wifiManager->setSaveConnect(false);
+        wifiManager->setEnableConfigPortal(true);
       } else {
-        wifiManager.setEnableConfigPortal(false);
+        wifiManager->setEnableConfigPortal(false);
       }
       // FIXME: enable in AP mode
-      //wifiManager.setCaptivePortalEnable(false);
+      //wifiManager->setCaptivePortalEnable(false);
       // Connect to Wifi or ask for SSID
-      bool res = wifiManager.autoConnect(settings.ssid, settings.wpa_key);
+      bool res = wifiManager->autoConnect(settings.ssid, settings.wpa_key);
       /*
-      wifiManager.setConfigPortalTimeout(timeout);
-      wifiManager.startConfigPortal(settings.ssid);
-      wifiManager.startWebPortal();
+      wifiManager->setConfigPortalTimeout(timeout);
+      wifiManager->startConfigPortal(settings.ssid);
+      wifiManager->startWebPortal();
       */
       if (res) {
         myWiFiState = STA_MODE;
-        serial_response_next = F("WIFI CONNECTED");
+        serial_response_next = F("WIFI CONNECTED\r\nWIFI GOT IP");
       } else {
         myWiFiState = MYWIFI_OFF;
         // dead
@@ -535,14 +547,14 @@ void loop() {
     }
     break;
     case STA_REQUESTED: {
-      wifiManager.setCaptivePortalEnable(false);
-      wifiManager.disconnect();
+      //wifiManager->setCaptivePortalEnable(false);
+      wifiManager->disconnect();
       WiFi.mode(WIFI_STA);
       myWiFiState = DO_AUTOCONNECT;
     }
     break;
     case AUTO_REQUESTED: {
-      wifiManager.disconnect();
+      wifiManager->disconnect();
       WiFi.mode(WIFI_AP_STA);
       myWiFiState = DO_AUTOCONNECT;
     }
@@ -577,20 +589,19 @@ void loop() {
       }
       
       if (settings.flags.wifimanager_portal || (myWiFiState == AP_MODE && (!settings.flags.webservice))) {
-        wifiManager.startWebPortal();
-        serial_response_next = F("WIFI GOT IP");
+        wifiManager->startWebPortal();
       }
       logger.info(F("{'HTTPServer': 'started'}"));
       
       myWebState = WEB_FULL;
     break;
-    case WEB_FULL: // fall-through
-    case WEB_CONFIG: // fall-through
-    case WEB_REST: // fall-through
+    case WEB_FULL:
+    case WEB_CONFIG:
+    case WEB_REST:
       /* now handled by wifiManager portal server service
       server.handleClient();
       */
-      wifiManager.process();
+      wifiManager->process();
       if (shouldSaveConfig) {
         myLoopState = SAVE_SETTINGS;
       }
@@ -661,6 +672,10 @@ void loop() {
         break;
       }
       at_previous = at_current;
+    }
+    if (serial_response_next) {
+      Serial.println(serial_response_next);
+      serial_response_next = NULL;
     }
   }
 #endif

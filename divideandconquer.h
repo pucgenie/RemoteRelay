@@ -22,6 +22,6 @@
 
 #include "Arduino.h"
 
-uint8_t binarysearchString(const String *table, const String value);
+uint8_t binarysearchString(const String table[], const String value, uint8_t upperBound);
 
 #endif  // DIVIDEANDCONQUER_H

@@ -60,7 +60,13 @@ struct ST_SETTINGS {
          * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
          */
         byte wearlevel_mark    :4;
+        /**
+         * Output debug messages
+        **/
         byte debug             :1;
+        /**
+         * Log output to serial port
+        **/
         byte serial            :1;
         /**
          * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
@@ -68,8 +74,7 @@ struct ST_SETTINGS {
            AT+CIPSERVER=1,8080
            AT+CIPSTO=360
          *
-         * If not set, µC may sleep between ping pong intervals.
-         * If switch 1 is pressed/hold during boot, 
+         * If disabled, µC may sleep between ping pong intervals.
          */
         byte webservice        :1;
         byte wifimanager_portal:1;
@@ -116,6 +121,7 @@ enum MyWiFiState {
   STA_MODE,
   // fallback operation, autoConnect
   AUTO_REQUESTED,
+  DO_AUTOCONNECT,
   MYWIFI_OFF,
 };
 
@@ -139,7 +145,7 @@ extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
 extern MyLoopState myLoopState;
 extern MyWiFiState myWiFiState;
 extern MyWebState myWebState;
-extern WiFiManager wifiManager;
+extern WiFiManager *wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
 //void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset);

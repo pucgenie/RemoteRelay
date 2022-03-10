@@ -20,7 +20,8 @@
 #ifndef LEDSIGNALLING_H
 #define LEDSIGNALLING_H
 
-#include "Arduino.h"
+// uint8_t defined there
+#include <Arduino.h>
 
 void led_scream(const uint8_t value);
 

@@ -21,9 +21,9 @@
 
 //#include "syntacticsugar.h"
 
-uint8_t binarysearchString(const String *table, const String value) {
+uint8_t binarysearchString(const String table[], const String value, uint8_t upperBound) {
   //assert table != NULL && value != NULL
-  uint8_t lowerBound = 0, upperBound = sizeof(table);
+  uint8_t lowerBound = 0;
   uint8_t pivot = upperBound / 2;
   while (lowerBound != upperBound) {
     String elem = table[pivot];
