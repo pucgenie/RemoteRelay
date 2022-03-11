@@ -27,11 +27,7 @@
 
 #include <spi_flash.h>
 #include <EEPROM.h>
-#include <Pinger.h>
-extern "C"
-{
-  #include <lwip/icmp.h> // needed for icmp packet definitions
-}
+#include <AsyncPing.h>
 
 #include "RemoteRelay.h"
 char buffer[BUF_SIZE];
@@ -45,7 +41,7 @@ char buffer[BUF_SIZE];
 // contained in wifiManager->server->
 
 struct ST_SETTINGS settings;
-Logger logger = Logger();
+Logger logger;
 bool shouldSaveConfig = false;
 MyLoopState myLoopState = AFTER_SETUP;
 MyWiFiState myWiFiState = MYWIFI_OFF;
@@ -53,9 +49,11 @@ MyWebState myWebState = WEB_DISABLED;
 /**
  * WeFiManagerParameters can't be removed so deleting the whole object is necessary.
 **/
-WiFiManager *wifiManager = new WiFiManager();
-static Pinger pinger;
+WiFiManager * const wifiManager = new WiFiManager();
+static AsyncPing ping;
 static const __FlashStringHelper *serial_response_next = NULL;
+// TODO: should be configurable
+static IPAddress isp_endpoint(8,8,8,8);
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
 static ATReplies atreplies = ATReplies();
@@ -85,6 +83,8 @@ uint8_t crc8(const uint8_t *addr, uint8_t len) {
 
   while (len--) {
     uint8_t inbyte = *addr++;
+    #pragma clang loop unroll(full)
+    #pragma GCC unroll 8
     for (uint8_t i = 8; i; --i) {
       uint8_t mix = (crc ^ inbyte) & 0x01;
       crc >>= 1;
@@ -114,6 +114,8 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     // check if marked as deleted and how many bits are set 0
     x = p_settings.flags.wearlevel_mark;
     if (x < ((1<<GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark)) - 1)) {
+      #pragma clang loop unroll(full)
+      #pragma GCC unroll 8
       for (int nb = GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark); nb --> 0; ) {
         // some way to spare one instruction?^^
         if (x & (1<<nb) == 0) {
@@ -133,8 +135,8 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     //setDefaultSettings(p_settings);
     strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME+1);
     strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD+1);
-    strncpy_P(p_settings.ssid, PSTR("RemoteRelay"), LENGTH_SSID+1);
-    strncpy_P(p_settings.wpa_key, PSTR("1234x5678"), LENGTH_WPA_KEY+1);
+    strncpy_P(p_settings.ssid, PSTR(DEFAULT_STANDALONE_SSID), LENGTH_SSID+1);
+    strncpy_P(p_settings.wpa_key, PSTR(DEFAULT_STANDALONE_WPA_KEY), LENGTH_WPA_KEY+1);
     p_settings.flags.wearlevel_mark = ~0;
     p_settings.flags.debug = false;
     p_settings.flags.serial = false;
@@ -192,6 +194,9 @@ return;
       byte owf_i = sizeof(OVERWRITABLE_BYTES);
       while ((!found) && (owf_i --> 0)) {
         string_terminator_found = false;
+        // pucgenie: I wonder whether or not the compiler sees
+        #pragma clang loop unroll(full)
+        //#pragma GCC unroll 255
         for (int i = OVERWRITABLE_BYTES[owf_i]; i --> 0; ++ptr) {
           if ((*ptr) == 0) {
             string_terminator_found = true;
@@ -299,7 +304,7 @@ void getJSONSettings(char p_buffer[], size_t bufSize) {
     , bool2str(settings.flags.webservice)
     , bool2str(settings.flags.wifimanager_portal)
   );
-  assert(snstatus < 0 || snstatus > bufSize);
+  assert(snstatus < 0 || ((size_t /* interpret unsigned */) snstatus) > bufSize);
 }
 
 void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
@@ -336,6 +341,7 @@ void configureWebParams() {
 void setup()  {
   Serial.begin(115200);
   
+  // TODO: align to 256 Byte programmable blocks
   EEPROM.begin(512);
   
   // Load settigns from flash
@@ -350,9 +356,12 @@ void setup()  {
   wifiManager->setConfigPortalBlocking(false);
   wifiManager->setRemoveDuplicateAPs(true);
 
-  // Be sure the relay are in the default state (off)
-  for (uint8_t i = sizeof(channels); i > 0; ) {
-    setChannel(i, channels[--i]);
+  // Be sure the relay are in the default state (NC, off)
+  #pragma clang loop unroll(full)
+  #pragma GCC unroll 4
+  for (uint8_t i = sizeof(channels); i > 0; --i) {
+    // pucgenie: (i, --i) would violate -Wsequence-point
+    setChannel(i, channels[i - 1]);
   }
 
   // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
@@ -363,74 +372,7 @@ void setup()  {
   });
   
   wifiManager->setAPCallback(configModeCallback);
-
-  pinger.OnReceive([](const PingerResponse& response)
-  {
-    if (response.ReceivedResponse) {
-      Serial.printf(
-        "Reply from %s: bytes=%d time=%lums TTL=%d\n",
-        response.DestIPAddress.toString().c_str(),
-        response.EchoMessageSize - sizeof(struct icmp_echo_hdr),
-        response.ResponseTime,
-        response.TimeToLive);
-    } else {
-      Serial.printf("Request timed out.\n");
-    }
-
-    // Return true to continue the ping sequence.
-    // If current event returns false, the ping sequence is interrupted.
-    return true;
-  });
-
-  pinger.OnEnd([](const PingerResponse& response) {
-    // Evaluate lost packet percentage
-    float loss = 100;
-    if (response.TotalReceivedResponses > 0) {
-      loss = (response.TotalSentRequests - response.TotalReceivedResponses) * 100 / response.TotalSentRequests;
-    }
-    
-    // Print packet trip data
-    Serial.printf(
-      "Ping statistics for %s:\n",
-      response.DestIPAddress.toString().c_str());
-    Serial.printf(
-      "    Packets: Sent = %lu, Received = %lu, Lost = %lu (%.2f%% loss),\n",
-      response.TotalSentRequests,
-      response.TotalReceivedResponses,
-      response.TotalSentRequests - response.TotalReceivedResponses,
-      loss);
-
-    // Print time information
-    if (response.TotalReceivedResponses > 0) {
-      Serial.printf("Approximate round trip times in milli-seconds:\n");
-      Serial.printf(
-        "    Minimum = %lums, Maximum = %lums, Average = %.2fms\n",
-        response.MinResponseTime,
-        response.MaxResponseTime,
-        response.AvgResponseTime);
-    }
-    
-    // Print host data
-    Serial.printf("Destination host data:\n");
-    Serial.printf(
-      "    IP address: %s\n",
-      response.DestIPAddress.toString().c_str());
-    if(response.DestMacAddress != nullptr)
-    {
-      Serial.printf(
-        "    MAC address: " MACSTR "\n",
-        MAC2STR(response.DestMacAddress->addr));
-    }
-    if(response.DestHostname != "")
-    {
-      Serial.printf(
-        "    DNS name: %s\n",
-        response.DestHostname.c_str());
-    }
-
-    return true;
-  });
-
+  
   #ifdef DISABLE_NUVOTON_AT_REPLIES
   myWiFiState = AUTO_REQUESTED;
   #endif
@@ -565,12 +507,6 @@ void loop() {
     case STA_MODE:
       if (WiFi.status() != WL_CONNECTED) {
         // TODO: connection lost
-      }
-      if (pinger.Ping("technologytourist.com") == false) {
-        
-      }
-      if (pinger.Ping(IPAddress(8,8,8,8)) == false) {
-        
       }
     break;
   }

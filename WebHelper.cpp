@@ -87,13 +87,16 @@ void handleGETDebug() {
   if (!isAuthBasicOK()) {
 return;
   }
- 
-  wifiManager->server->send(200, CT_TEXT, logger.getLog());
+  String fromLog;
+  logger.getLog(fromLog);
+  wifiManager->server->send(200, CT_TEXT, fromLog);
+  // pucgenie: Note to myself: In C++ a stack object's destructor is called automatically.
+  //delete &fromLog;
 }
 
-#define wm_sendbuffer(x, ct)                   \
-  char cxt_tmp[sizeof(ct) / sizeof(ct[0])];     \
-  strcpy_P(cxt_tmp, ct);                        \
+#define wm_sendbuffer(x, ct, buffer)             \
+  char cxt_tmp[sizeof(ct) / sizeof(*ct)];        \
+  strcpy_P(cxt_tmp, ct);                         \
   wifiManager->server->send(x, cxt_tmp, buffer); \
 
 /**
@@ -107,7 +110,7 @@ return;
   char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
   
-  wm_sendbuffer(200, CT_JSON);
+  wm_sendbuffer(200, CT_JSON, buffer);
 }
 
 
@@ -195,7 +198,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
-  wm_sendbuffer(201, CT_JSON);
+  wm_sendbuffer(201, CT_JSON, buffer);
 }
 
 /**
@@ -257,7 +260,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wm_sendbuffer(200, CT_JSON);
+  wm_sendbuffer(200, CT_JSON, buffer);
 }
 
 /**
@@ -270,7 +273,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wm_sendbuffer(200, CT_JSON);
+  wm_sendbuffer(200, CT_JSON, buffer);
 }
 
 void setup_web_handlers(size_t channel_count) {

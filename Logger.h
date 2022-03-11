@@ -48,7 +48,7 @@ class Logger {
     void logNow(const char*); // Print and store message log, no additional formatting.
     void setSerial(bool);             // Enable log output on serial port
     void setDebug(bool);              // Enable debug log output
-    String getLog(void);              // Return the current log
+    void getLog(String&);              // Return the current log
   
   private:
   

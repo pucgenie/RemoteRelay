@@ -21,7 +21,7 @@
 #define SYNTACTICSUGAR_H
 
 #define bool2str(x) x ? "true" : "false"
-#define charnonempty(x) x[0] != 0
+#define charnonempty(x) x[0] != '\0'
 
 /**
  * You can indirectly read the actual bit width (maximum value) from compiler warnings.

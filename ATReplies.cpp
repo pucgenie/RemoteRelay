@@ -76,20 +76,15 @@
 
 MyATCommand ATReplies::handle_nuvoTon_comms(Logger &logger) {
   // Let's hope that communication doesn't get interrupted and that it doesn't take too long.
-  String stringIn = Serial.readStringUntil('\r');
-  int after_data;
-  while ((after_data = Serial.read()) != '\n') {
-    if (after_data == -1) {
-      delay(10);
-  continue;
-    }
-    logger.debug(F("{'unknown_input': '%c'}"), after_data);
-  }
+  String stringIn = Serial.readStringUntil('\n');
   if (stringIn.length() == 0) {
     logger.logNow("{'error': 'empty line on serial encountered'}");
 return INVALID_EXPECTED_AT;
   }
-  logger.debug(F("{'Serial_received': '%s'}"), stringIn);
+  char tmpStr[stringIn.length() + 1];
+  stringIn.toCharArray(tmpStr, stringIn.length());
+  tmpStr[stringIn.length()] = '\0';
+  logger.debug(F("{'Serial_received': '%s'}"), tmpStr);
 
   if (stringIn.indexOf("AT+RST") != -1) {
     // pretend we reset (wait a bit then send the WiFi connected message)

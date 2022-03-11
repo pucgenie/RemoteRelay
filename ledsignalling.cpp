@@ -45,7 +45,7 @@ void led_scream(uint8_t value) {
   digitalWrite(LED_BUILTIN, HIGH);
   const uint8_t *ptr = alternate_delays;
   bool state = false;
-  while ((*ptr) != 0) {
+  while ((*ptr) != '\0') {
     delay(*(ptr++) * 32);
     state = !state;
     digitalWrite(LED_BUILTIN, state ? LOW : HIGH);

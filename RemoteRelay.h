@@ -31,6 +31,8 @@
 // Default value
 #define DEFAULT_LOGIN "sxabc"        // AuthBasic credentials
 #define DEFAULT_PASSWORD "MtsssezPzg"
+#define DEFAULT_STANDALONE_SSID "RemoteRelay"
+#define DEFAULT_STANDALONE_WPA_KEY "1234x5678"
 
 #define FOUR_WAY_MODE           // Enable channels 3 and 4 (comment out to disable)
 
@@ -145,7 +147,7 @@ extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
 extern MyLoopState myLoopState;
 extern MyWiFiState myWiFiState;
 extern MyWebState myWebState;
-extern WiFiManager *wifiManager;
+extern WiFiManager * const wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
 //void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset);

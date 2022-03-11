@@ -21,8 +21,6 @@
 
 #include "Logger.h"
 
-static char buffer[BUF_LEN];
-
 Logger::Logger() {
   // Init ring log
   for (int i = RINGLOG_SIZE; i --> 0; ) {
@@ -41,7 +39,7 @@ void Logger::setSerial(bool d) {
   enableSerial = d;
 }
 
-void Logger::debug(const __FlashStringHelper * fmt, ...) {
+void Logger::debug(const __FlashStringHelper *fmt, ...) {
   if (!enableDebug) {
 return;
   }
@@ -51,7 +49,7 @@ return;
   va_end(ap);
 }
 
-void Logger::info(const __FlashStringHelper * fmt, ...) {
+void Logger::info(const __FlashStringHelper *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   log(fmt, ap);
@@ -76,23 +74,29 @@ void Logger::logNow(const char* p_buffer) {
   }
 }
 
-void Logger::log(const __FlashStringHelper * fmt, va_list ap) {
+void Logger::log(const __FlashStringHelper *fmt, va_list ap) {
+  // just keep it allocated
+  static char buffer[BUF_LEN];
   // Generate log message (does not support float)
+  // TODO: Handle return code.
   vsnprintf_P(buffer, BUF_LEN, reinterpret_cast<PGM_P>(fmt), ap);
   logNow(buffer);
 }
 
-String Logger::getLog() {
+void Logger::getLog(String &msg) {
   // Get uptime
   char uptime[9];
   int sec = millis() / 1000;
   int min = sec / 60;
   int hour = min / 60;
   // pucgenie: Don't use F() here.
+  // TODO: Handle return code.
   snprintf(uptime, sizeof(uptime), "%02d:%02d:%02d", hour, min % 60, sec % 60);
 
+  // pucgenie: Don't worry about a few wasted CPU cycles to do that everytime.
+  msg.reserve(255);
   // Generate header
-  String msg = " ==== DEBUG LOG ====";
+  msg += " ==== DEBUG LOG ====";
   msg += "\r\nChip ID: ";
   msg += ESP.getChipId();
   msg += "\r\nFree Heap: ";
@@ -126,6 +130,4 @@ String Logger::getLog() {
   if (enableSerial) {
     Serial.print(msg);
   }
-
-  return msg;
 }
