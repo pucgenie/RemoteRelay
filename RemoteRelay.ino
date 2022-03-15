@@ -68,8 +68,6 @@ static uint8_t channels[] = {
 #endif
 };
 
-//assert sizeof(channels) <= 9: "print functions are restricted to one-digit channel count"
-
 static uint16_t settings_offset;
 
 /**
@@ -138,6 +136,7 @@ bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
     strncpy_P(p_settings.ssid, PSTR(DEFAULT_STANDALONE_SSID), LENGTH_SSID+1);
     strncpy_P(p_settings.wpa_key, PSTR(DEFAULT_STANDALONE_WPA_KEY), LENGTH_WPA_KEY+1);
     p_settings.flags.wearlevel_mark = ~0;
+    p_settings.flags.erase_cycles = 0;
     p_settings.flags.debug = false;
     p_settings.flags.serial = false;
     p_settings.flags.wifimanager_portal = true;
@@ -188,7 +187,7 @@ return;
         offsetof(ST_SETTINGS, password) - offsetof(ST_SETTINGS, login),
         offsetof(ST_SETTINGS, ssid) - offsetof(ST_SETTINGS, password),
         offsetof(ST_SETTINGS, wpa_key) - offsetof(ST_SETTINGS, ssid),
-        offsetof(ST_SETTINGS, erase_cycles) - offsetof(ST_SETTINGS, wpa_key),
+        sizeof(((ST_SETTINGS *)0)->wpa_key)
       };
       bool string_terminator_found;
       byte owf_i = sizeof(OVERWRITABLE_BYTES);
@@ -241,7 +240,7 @@ void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset) {
   uint8_t theCRC = crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS));
   p_settings_offset += SETTINGS_FALSH_SIZE;
   if (p_settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
-    p_settings.erase_cycles += 1;
+    p_settings.flags.erase_cycles += 1;
     p_settings_offset = 0;
     //TODO: erase sector explicitly or keep using EEPROM class' auto-detection?
   }
@@ -276,6 +275,7 @@ void setChannel(uint8_t channel, uint8_t mode) {
   // Compute checksum
   payload[3] = payload[0] + payload[1] + payload[2];
   
+  static_assert(sizeof(channels) <= 9, "print functions are restricted to one-digit channel count");
   // Save status 
   channels[channel - 1] = mode;
   
@@ -342,6 +342,7 @@ void setup()  {
   Serial.begin(115200);
   
   // TODO: align to 256 Byte programmable blocks
+  // e.g. map 1st block, if invalid map 2nd...16th block. If 16th block is to be invalidated, erase 4K page and start from 1st block.
   EEPROM.begin(512);
   
   // Load settigns from flash

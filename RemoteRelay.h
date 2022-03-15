@@ -61,15 +61,15 @@ struct ST_SETTINGS {
          * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
          * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
          */
-        byte wearlevel_mark    :4;
+        int16_t wearlevel_mark    :4;
         /**
          * Output debug messages
         **/
-        byte debug             :1;
+        int16_t debug             :1;
         /**
          * Log output to serial port
         **/
-        byte serial            :1;
+        int16_t serial            :1;
         /**
          * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
            AT+CIPMUX=1
@@ -78,11 +78,13 @@ struct ST_SETTINGS {
          *
          * If disabled, µC may sleep between ping pong intervals.
          */
-        byte webservice        :1;
-        byte wifimanager_portal:1;
+        int16_t webservice        :1;
+        int16_t wifimanager_portal:1;
+
+        int16_t erase_cycles      :8;
       };
       // each member needs to have the same type that the full bitfield has
-      byte reg;
+      int16_t reg;
     } flags;
     char login[AUTHBASIC_LEN_USERNAME+1];
     char password[AUTHBASIC_LEN_PASSWORD+1];
@@ -94,7 +96,6 @@ struct ST_SETTINGS {
      * The access point's password.
      */
     char wpa_key[LENGTH_WPA_KEY+1];
-    long erase_cycles;
 };
 
 enum MyLoopState {

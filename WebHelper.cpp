@@ -55,16 +55,6 @@ static const String WEB_PARAM[] = {
     FOREACH_FRUIT(GENERATE_STRING)
 };
 
-// pucgenie: ESP8266WebServer::on copies the string anyways
-static const char *channelPath[] PROGMEM = {
-    "/channel/1"
-  , "/channel/2"
-#ifdef FOUR_WAY_MODE
-  , "/channel/3"
-  , "/channel/4"
-#endif
-};
-
 bool isAuthBasicOK() {
   // Disable auth if not credential provided
   if (charnonempty(settings.login) && charnonempty(settings.password)
