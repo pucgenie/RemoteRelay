@@ -25,8 +25,10 @@
 // board manager: "Generic ESP8266 Board" https://randomnerdtutorials.com/how-to-install-esp8266-board-arduino-ide/
 // preferences additional: https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-#include <spi_flash.h>
-#include <EEPROM.h>
+// To control global EEPROM access (begin etc.)
+#include "EEPROM.h"
+
+// To detect Internet presence, more or less.
 #include <AsyncPing.h>
 
 #include "RemoteRelay.h"
@@ -40,7 +42,7 @@ char buffer[BUF_SIZE];
 //ESP8266WebServer server(80);
 // contained in wifiManager->server->
 
-struct ST_SETTINGS settings;
+RemoteRelaySettings settings = RemoteRelaySettings();
 Logger logger;
 bool shouldSaveConfig = false;
 MyLoopState myLoopState = AFTER_SETUP;
@@ -68,191 +70,13 @@ static uint8_t channels[] = {
 #endif
 };
 
-static uint16_t settings_offset;
+static uint16_t settings_offset = 0;
 
 /**
  * Flash memory helpers 
  ********************************************************************************/
 
-// CRC8 simple calculation
-// Based on https://github.com/PaulStoffregen/OneWire/blob/master/OneWire.cpp
-uint8_t crc8(const uint8_t *addr, uint8_t len) {
-  uint8_t crc = 0;
-
-  while (len--) {
-    uint8_t inbyte = *addr++;
-    #pragma clang loop unroll(full)
-    #pragma GCC unroll 8
-    for (uint8_t i = 8; i; --i) {
-      uint8_t mix = (crc ^ inbyte) & 0x01;
-      crc >>= 1;
-      if (mix) {
-        crc ^= 0x8C;
-      }
-      inbyte >>= 1;
-    }
-  }
-  return crc;
-}
-
-#define SETTINGS_FALSH_SIZE sizeof(struct ST_SETTINGS)+1
-#define SETTINGS_FALSH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FALSH_SIZE)
-
-/**
- * Reads settings from EEPROM flash into p_settings.
- * Returns the byte start location of the loaded settings block.
- * 
- * @param the_address Should be 0 to load the first valid settings block. Can be an exact address too.
- */
-bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &the_address) {
-  int x;
-  bool ret;
-  while (ret = (the_address < (SETTINGS_FALSH_OVERADDR))) {
-    EEPROM.get(the_address, p_settings);
-    // check if marked as deleted and how many bits are set 0
-    x = p_settings.flags.wearlevel_mark;
-    if (x < ((1<<GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark)) - 1)) {
-      #pragma clang loop unroll(full)
-      #pragma GCC unroll 8
-      for (int nb = GET_BIT_FIELD_WIDTH(ST_SETTINGS, flags.wearlevel_mark); nb --> 0; ) {
-        // some way to spare one instruction?^^
-        if (x & (1<<nb) == 0) {
-          the_address += sizeof(struct ST_SETTINGS) + 1;
-        }
-      }
-    } else if (crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS)) == uint8_t(EEPROM.read(the_address + sizeof(struct ST_SETTINGS)))) {
-      // index of valid settings found
-      EEPROM.get(the_address, p_settings);
-  break;
-    } else {
-      the_address += sizeof(struct ST_SETTINGS) + 1;
-    }
-  }
-  if (!ret) {
-    logger.info(F("{'settings': 'loading default'}"));
-    //setDefaultSettings(p_settings);
-    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME+1);
-    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD+1);
-    strncpy_P(p_settings.ssid, PSTR(DEFAULT_STANDALONE_SSID), LENGTH_SSID+1);
-    strncpy_P(p_settings.wpa_key, PSTR(DEFAULT_STANDALONE_WPA_KEY), LENGTH_WPA_KEY+1);
-    p_settings.flags.wearlevel_mark = ~0;
-    p_settings.flags.erase_cycles = 0;
-    p_settings.flags.debug = false;
-    p_settings.flags.serial = false;
-    p_settings.flags.wifimanager_portal = true;
-    p_settings.flags.webservice = true;
-    
-    led_scream(0b10101010);
-    
-    the_address = 0;
-  } else {
-    // serial is disabled by default, so spare us another if after setting
-    logger.info(F("{'settings': 'loaded from flash'}"));
-  }
-  // could have changed
-  logger.setSerial(p_settings.flags.serial);
-
-  // Display loaded setting on debug
-  if (settings.flags.debug) {
-    getJSONSettings(buffer, BUF_SIZE);
-    logger.logNow(buffer);
-  }
-  return ret;
-}
-
-/**
- * write a zero anywhere in CRC to force loading default settings at boot
- */
-void eeprom_destroy_crc(uint16_t &old_addr) {
-  struct ST_SETTINGS tmp_settings;
-  if (!loadSettings(tmp_settings, old_addr)) {
-    // it already is incorrect - nop.
-return;
-  }
-  tmp_settings.flags.wearlevel_mark <<= 1;
-  uint8_t crc = EEPROM.read(old_addr + sizeof(struct ST_SETTINGS));
-  if (crc == crc8((uint8_t*) &tmp_settings, sizeof(struct ST_SETTINGS))) {
-    if (crc == 0) {
-      // what a coincidence
-      bool found = false;
-      char *ptr = tmp_settings.login;
-      if (offsetof(ST_SETTINGS, password) < offsetof(ST_SETTINGS, login)) {
-        // FIXME: need a define for char[] capacities in ST_SETTINGS...
-        while (true) {
-          led_scream(0b11001100);
-        }
-        // # error ERROR ST_SETTINGS members changed unpredictably
-      }
-      static const uint16_t OVERWRITABLE_BYTES[] = {
-        offsetof(ST_SETTINGS, password) - offsetof(ST_SETTINGS, login),
-        offsetof(ST_SETTINGS, ssid) - offsetof(ST_SETTINGS, password),
-        offsetof(ST_SETTINGS, wpa_key) - offsetof(ST_SETTINGS, ssid),
-        sizeof(((ST_SETTINGS *)0)->wpa_key)
-      };
-      bool string_terminator_found;
-      byte owf_i = sizeof(OVERWRITABLE_BYTES);
-      while ((!found) && (owf_i --> 0)) {
-        string_terminator_found = false;
-        // pucgenie: I wonder whether or not the compiler sees
-        #pragma clang loop unroll(full)
-        //#pragma GCC unroll 255
-        for (int i = OVERWRITABLE_BYTES[owf_i]; i --> 0; ++ptr) {
-          if ((*ptr) == 0) {
-            string_terminator_found = true;
-          } else if (string_terminator_found) {
-            (*ptr) = 0;
-            // We are certain that changing a single bit changes the resulting CRC too.
-            found = true;
-        break;
-            }
-        }
-      }
-      // don't touch ST_SETTINGS.erase_cycles
-      if (!found) {
-         // FIXME: erase
-         while (true) {
-          led_scream(0b11101110);
-        }
-      }
-    } else {
-      // Arduino.h byte is unsigned
-      byte i = 0b10000000;
-      while (i > 0 && (crc & i) == 0) {
-        i >>= 1;
-      }
-      //assert i != 0;
-      crc ^= i;
-      // it can't possibly happen that it doesn't find a bit because 0 case was handled before.
-      EEPROM.write(old_addr + sizeof(struct ST_SETTINGS), crc);
-    }
-    EEPROM.put(old_addr, tmp_settings);
-    // don't commit
-  }
-}
-
-void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset) {
-  #ifdef EEPROM_SPI_NOR_REPROGRAM
-  {
-    uint16_t old_addr = p_settings_offset;
-    eeprom_destroy_crc(old_addr);
-  }
-  #endif
-  uint8_t theCRC = crc8((uint8_t*) &p_settings, sizeof(struct ST_SETTINGS));
-  p_settings_offset += SETTINGS_FALSH_SIZE;
-  if (p_settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
-    p_settings.flags.erase_cycles += 1;
-    p_settings_offset = 0;
-    //TODO: erase sector explicitly or keep using EEPROM class' auto-detection?
-  }
-  EEPROM.put(p_settings_offset, p_settings);
-  EEPROM.put(p_settings_offset + sizeof(struct ST_SETTINGS), theCRC);
-  EEPROM.commit();
-}
-
-#undef SETTINGS_FALSH_OVERADDR
-#undef SETTINGS_FALSH_SIZE
-
-//void setDefaultSettings(struct ST_SETTINGS& p_settings)
+//void setDefaultSettings(RemoteRelaySettings& p_settings)
 
 /**
  * General helpers 
@@ -294,9 +118,9 @@ void setChannel(uint8_t channel, uint8_t mode) {
   }
 }
 
-void getJSONSettings(char p_buffer[], size_t bufSize) {
+size_t getJSONSettings(char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  int snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
+  size_t snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
 )=="==")
     , settings.login
     , bool2str(settings.flags.debug)
@@ -304,17 +128,19 @@ void getJSONSettings(char p_buffer[], size_t bufSize) {
     , bool2str(settings.flags.webservice)
     , bool2str(settings.flags.wifimanager_portal)
   );
-  assert(snstatus < 0 || ((size_t /* interpret unsigned */) snstatus) > bufSize);
+  assert(snstatus > 0 && snstatus < bufSize);
+  return snstatus;
 }
 
-void getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
+size_t getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  int snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"channel":%.1i,"mode":"%.3s"}
+  size_t snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"channel":%.1i,"mode":"%.3s"}
 )=="==")
     , channel
     , (channels[channel - 1] == MODE_ON) ? "on" : "off"
   );
-  assert(snstatus < 0 || snstatus > bufSize);
+  assert(snstatus > 0 && snstatus < bufSize);
+  return snstatus;
 }
 
 void configModeCallback(WiFiManager *myWiFiManager) {
@@ -343,13 +169,13 @@ void setup()  {
   
   // TODO: align to 256 Byte programmable blocks
   // e.g. map 1st block, if invalid map 2nd...16th block. If 16th block is to be invalidated, erase 4K page and start from 1st block.
-  EEPROM.begin(512);
+  EEPROM.begin(256);
   
-  // Load settigns from flash
-  if (loadSettings(settings, settings_offset)) {
-    logger.info(F("{'RemoteRelay': '%s'}"), VERSION);
+  // Load settings from flash
+  if (settings.loadSettings(settings_offset)) {
+    logger.info(F("{'RemoteRelay': '%s'}"), REMOTERELAY_VERSION);
   } else {
-    logger.info(F("{'RemoteRelay': '%s', 'mode': 'failsafe'}"), VERSION);
+    logger.info(F("{'RemoteRelay': '%s', 'mode': 'failsafe'}"), REMOTERELAY_VERSION);
   }
   // nop - don't need to save defaults in error case because they can be restored anytime. Save write cycles.
   
@@ -439,7 +265,7 @@ void loop() {
     }
     break;
     case EEPROM_DESTROY_CRC: {
-      eeprom_destroy_crc(settings_offset);
+      RemoteRelaySettings::eeprom_destroy_crc(settings_offset);
       // where to commit then?
       EEPROM.commit();
       myLoopState = RESTART_REQUESTED;
@@ -447,7 +273,7 @@ void loop() {
     break;
     case SAVE_SETTINGS: {
       shouldSaveConfig = false;
-      saveSettings(settings, settings_offset);
+      settings.saveSettings(settings_offset);
       myLoopState = AFTER_SETUP;
     }
     break;
@@ -510,6 +336,10 @@ void loop() {
         // TODO: connection lost
       }
     break;
+    case MYWIFI_OFF: {
+      
+    }
+    break;
   }
 
   switch (myWebState) {
@@ -556,15 +386,15 @@ void loop() {
     // pretend to be an AT device here
     if (Serial.available()) {
       switch (at_current = atreplies.handle_nuvoTon_comms(logger)) {
-        AT_RESTORE: {
+        case AT_RESTORE: {
           myLoopState = RESTORE;
         }
         break;
-        AT_RST: {
+        case AT_RST: {
           myLoopState = RESET;
         }
         break;
-        AT_CWMODE_1: {
+        case AT_CWMODE_1: {
           if (at_previous != AT_CWMODE_1) {
             if (myWiFiState == STA_MODE) {
               logger.logNow("{'myWiFiMode': 'unexpected state'}");
@@ -573,37 +403,37 @@ void loop() {
           }
         }
         break;
-        AT_CWMODE_2: {
+        case AT_CWMODE_2: {
           if (at_previous != AT_CWMODE_2) {
             myWiFiState = AP_REQUESTED;
           }
         }
         break;
-        AT_CWSTARTSMART: {
+        case AT_CWSTARTSMART: {
           
         }
         break;
-        AT_CWSMARTSTART_1: {
+        case AT_CWSMARTSTART_1: {
           
         }
         break;
-        AT_CIPMUX_1: {
+        case AT_CIPMUX_1: {
           
         }
         break;
-        AT_CIPSERVER: {
+        case AT_CIPSERVER: {
           myWebState = WEB_REQUESTED;
         }
         break;
-        AT_CIPSTO: {
+        case AT_CIPSTO: {
+          
+        }
+        break;
+        case INVALID_EXPECTED_AT: {
           
         }
         break;
         default: {
-          
-        }
-        break;
-        INVALID_EXPECTED_AT: {
           
         }
         break;

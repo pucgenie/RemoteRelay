@@ -23,6 +23,9 @@
 #define REMOTERELAY_H
 
 #include "Logger.h"
+#include "RemoteRelaySettings.h"
+
+#define REMOTERELAY_VERSION "2.0"
 
 #include <DNSServer.h>
 #include <WiFiManager.h>         // See https://github.com/tzapu/WiFiManager for documentation
@@ -41,65 +44,12 @@
 #include "ATReplies.h"
 #endif
 
-// Internal constant
-#define AUTHBASIC_LEN_USERNAME 20        // Login or password 20 char max
-#define AUTHBASIC_LEN_PASSWORD 20        // Login or password 20 char max
-#define LENGTH_SSID 32
-#define LENGTH_WPA_KEY 64
-#define VERSION "2.0"
 
 #define MODE_ON 1               // See LC-Relay board datasheet for open/close values
 #define MODE_OFF 0
 
-// 512 bytes mapped (EEPROM.begin).
-struct ST_SETTINGS {
-  public:
-    union {
-      struct {
-        /**
-         * Count the number of zeroes to rush along the linked list.
-         * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
-         * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
-         */
-        int16_t wearlevel_mark    :4;
-        /**
-         * Output debug messages
-        **/
-        int16_t debug             :1;
-        /**
-         * Log output to serial port
-        **/
-        int16_t serial            :1;
-        /**
-         * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
-           AT+CIPMUX=1
-           AT+CIPSERVER=1,8080
-           AT+CIPSTO=360
-         *
-         * If disabled, µC may sleep between ping pong intervals.
-         */
-        int16_t webservice        :1;
-        int16_t wifimanager_portal:1;
-
-        int16_t erase_cycles      :8;
-      };
-      // each member needs to have the same type that the full bitfield has
-      int16_t reg;
-    } flags;
-    char login[AUTHBASIC_LEN_USERNAME+1];
-    char password[AUTHBASIC_LEN_PASSWORD+1];
-    /**
-     * The access point's SSID.
-     */
-    char ssid[LENGTH_SSID+1];
-    /**
-     * The access point's password.
-     */
-    char wpa_key[LENGTH_WPA_KEY+1];
-};
-
 enum MyLoopState {
-  // first loop call
+  // it means something like READY
   AFTER_SETUP,
   // delayed shutdown
   SHUTDOWN_REQUESTED,
@@ -143,7 +93,7 @@ extern char buffer[];             // Global char* to avoid multiple String conca
 // Global variables
 //extern ESP8266WebServer server;
 extern Logger logger;
-extern struct ST_SETTINGS settings;
+extern RemoteRelaySettings settings;
 extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
 extern MyLoopState myLoopState;
 extern MyWiFiState myWiFiState;
@@ -151,12 +101,18 @@ extern MyWebState myWebState;
 extern WiFiManager * const wifiManager;
 
 void setChannel(uint8_t channel, uint8_t mode);
-//void saveSettings(struct ST_SETTINGS &p_settings, uint16_t &p_settings_offset);
+//void saveSettings(RemoteRelaySettings &p_settings, uint16_t &p_settings_offset);
 void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.
-//bool loadSettings(struct ST_SETTINGS &p_settings, uint16_t &out_address);
-//void setDefaultSettings(struct ST_SETTINGS& p_settings);
-void getJSONSettings(char *buffer, size_t bufSize);
-void getJSONState(uint8_t channel, char *p_buffer, size_t bufSize);
+//bool loadSettings(RemoteRelaySettings &p_settings, uint16_t &out_address);
+//void setDefaultSettings(RemoteRelaySettings& p_settings);
+/**
+ * @returns count of chars written (without terminator)
+**/
+size_t getJSONSettings(char *buffer, size_t bufSize);
+/**
+ * @returns count of chars written (without terminator)
+**/
+size_t getJSONState(uint8_t channel, char *p_buffer, size_t bufSize);
 
 #endif  // REMOTERELAY_H
