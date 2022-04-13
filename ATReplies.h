@@ -22,7 +22,7 @@
 #ifndef ATREPLIES_H
 #define ATREPLIES_H
 
-#include "Arduino.h"
+#include <Arduino.h>
 #include "Logger.h"
 
 enum MyATCommand {
@@ -35,13 +35,14 @@ enum MyATCommand {
   AT_CIPMUX_1,
   AT_CIPSERVER,
   AT_CIPSTO,
-  INVALID_EXPECTED_AT,
+  INVALID_EXPECTED_AT
 };
 
 // TODO: pucgenie: Handle the exact commands.
 class ATReplies {
   private:
     static int cwmode;
+    static char[] COMMAND_STRINGS;
     
   public:
     static MyATCommand handle_nuvoTon_comms(Logger &logger);

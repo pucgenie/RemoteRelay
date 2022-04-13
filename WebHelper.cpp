@@ -29,8 +29,8 @@
 
 #include "divideandconquer.h"
 
-static PGM_P CT_JSON PROGMEM = "application/json";
-static const char* CT_TEXT = "text/plain";
+static /*PGM_P*/ const char CT_JSON[] PROGMEM = "application/json";
+static const char CT_TEXT[] = "text/plain";
 
 // define enum stringlist https://stackoverflow.com/a/10966395
 #define FOREACH_FRUIT(FRUIT)      \
@@ -58,8 +58,8 @@ static const String WEB_PARAM[] = {
 bool isAuthBasicOK() {
   // Disable auth if not credential provided
   if (charnonempty(settings.login) && charnonempty(settings.password)
-      && !wifiManager->server->authenticate(settings.login, settings.password)) {
-    wifiManager->server->requestAuthentication();
+      && !wifiManager.server->authenticate(settings.login, settings.password)) {
+    wifiManager.server->requestAuthentication();
 return false;
   }
   return true;
@@ -79,15 +79,16 @@ return;
   }
   String fromLog;
   logger.getLog(fromLog);
-  wifiManager->server->send(200, CT_TEXT, fromLog);
+  wifiManager.server->send(200, CT_TEXT, fromLog);
   // pucgenie: Note to myself: In C++ a stack object's destructor is called automatically.
   //delete &fromLog;
 }
 
 #define wm_sendbuffer(x, ct, buffer)             \
+  /* compile-time special case */                \
   char cxt_tmp[sizeof(ct) / sizeof(*ct)];        \
   strcpy_P(cxt_tmp, ct);                         \
-  wifiManager->server->send(x, cxt_tmp, buffer); \
+  wifiManager.server->send(x, cxt_tmp, buffer);  \
 
 /**
  * GET /settings
@@ -100,7 +101,7 @@ return;
   char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
   
-  wm_sendbuffer(200, CT_JSON, buffer);
+  wm_sendbuffer(200, CT_JSON, String(buffer));
 }
 
 
@@ -116,42 +117,42 @@ void handlePOSTSettings() {
 return;
   }
   // Check if args have been supplied
-  if (wifiManager->server->args() == 0) {
-    wifiManager->server->send(400, CT_TEXT, F("Invalid parameters\r\n"));
+  if (wifiManager.server->args() == 0) {
+    wifiManager.server->send(400, CT_TEXT, F("Invalid parameters\r\n"));
 return;
   }
 
   // Parse args   
-  for (uint8_t i = wifiManager->server->args(); i --> 0; ) {
-    String param = wifiManager->server->argName(i);
+  for (uint8_t i = wifiManager.server->args(); i --> 0; ) {
+    String param = wifiManager.server->argName(i);
     switch (binarysearchString(WEB_PARAM, param, sizeof(WEB_PARAM))) {
       default: {
-        wifiManager->server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
+        wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
 return;
       }
       case WEB_PARAM_debug: { // debug
-        settings.flags.debug = wifiManager->server->arg(i).equalsIgnoreCase("true");
+        settings.flags.debug = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.info(F("{'updated_debug': %.5s}"), bool2str(settings.flags.debug));
       }
     break;
       case WEB_PARAM_login: { // login
-        wifiManager->server->arg(i).toCharArray(settings.login, AUTHBASIC_LEN_USERNAME);
+        wifiManager.server->arg(i).toCharArray(settings.login, AUTHBASIC_LEN_USERNAME);
         logger.info(F("{'updated_login': '%s}"), settings.login);
       }
     break;
       case WEB_PARAM_password: { // password
-        wifiManager->server->arg(i).toCharArray(settings.password, AUTHBASIC_LEN_PASSWORD);
+        wifiManager.server->arg(i).toCharArray(settings.password, AUTHBASIC_LEN_PASSWORD);
         logger.info(F("{'updated_password': '%s'}"), settings.password);
       }
     break;
       case WEB_PARAM_serial: { // serial
-        settings.flags.serial = wifiManager->server->arg(i).equalsIgnoreCase("true");
+        settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
         logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
       case WEB_PARAM_wifimanager_portal: { // 
-        bool newSetting = wifiManager->server->arg(i).equalsIgnoreCase("true");
+        bool newSetting = wifiManager.server->arg(i).equalsIgnoreCase("true");
         if (settings.flags.wifimanager_portal != newSetting) {
           // FIXME: stop or start it
         }
@@ -160,7 +161,7 @@ return;
       }
     break;
       case WEB_PARAM_webservice: { // 
-        bool newSetting = wifiManager->server->arg(i).equalsIgnoreCase("true");
+        bool newSetting = wifiManager.server->arg(i).equalsIgnoreCase("true");
         if (settings.flags.webservice != newSetting) {
           // FIXME: stop or start it
         }
@@ -169,12 +170,12 @@ return;
       }
     break;
       case WEB_PARAM_ssid: { // 
-        wifiManager->server->arg(i).toCharArray(settings.ssid, AUTHBASIC_LEN_PASSWORD);
+        wifiManager.server->arg(i).toCharArray(settings.ssid, AUTHBASIC_LEN_PASSWORD);
         logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
     break;
       case WEB_PARAM_wpa_key: { // 
-        settings.flags.serial = wifiManager->server->arg(i).equalsIgnoreCase("true");
+        settings.flags.serial = wifiManager.server->arg(i).equalsIgnoreCase("true");
         logger.setSerial(settings.flags.serial);
         logger.info(F("{'updated_serial': %.5s}"), bool2str(settings.flags.serial));
       }
@@ -188,7 +189,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONSettings(buffer, BUF_SIZE);
-  wm_sendbuffer(201, CT_JSON, buffer);
+  wm_sendbuffer(201, CT_JSON, String(buffer));
 }
 
 /**
@@ -201,14 +202,14 @@ return;
   
   logger.info(F("{'action': 'reset settings'}"));
 
-  wifiManager->resetSettings();
+  wifiManager.resetSettings();
   //setDefaultSettings(settings);
 
   // Don't write default settings in EEPROM flash...
   //saveSettings(settings);
   
   // Send response now
-  wifiManager->server->send(200, CT_TEXT, F("Reset OK"));
+  wifiManager.server->send(200, CT_TEXT, F("Reset OK"));
 
   myLoopState = EEPROM_DESTROY_CRC;
 }
@@ -226,19 +227,19 @@ return;
   
   // Check if args have been supplied
   // Check if requested arg has been suplied
-  if (wifiManager->server->args() != 1 || wifiManager->server->argName(0) != "mode") {
-    wifiManager->server->send(400, CT_TEXT, F("Invalid parameter\r\n"));
+  if (wifiManager.server->args() != 1 || wifiManager.server->argName(0) != "mode") {
+    wifiManager.server->send(400, CT_TEXT, F("Invalid parameter\r\n"));
 return;
   }
 
-  uint8_t requestedMode = MODE_OFF; // Default in case of error
-  String value = wifiManager->server->arg(0);
+  int8_t requestedMode = MODE_OFF; // Default in case of error
+  String value = wifiManager.server->arg(0);
   if (value.equalsIgnoreCase("on")) {
     requestedMode = MODE_ON;
   } else if (value.equalsIgnoreCase("off")) {
     requestedMode = MODE_OFF;
   } else {
-    wifiManager->server->send(400, CT_TEXT, "Invalid value: " + value + "\r\n");
+    wifiManager.server->send(400, CT_TEXT, "Invalid value: " + value + "\r\n");
 return;
   } 
 
@@ -250,7 +251,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wm_sendbuffer(200, CT_JSON, buffer);
+  wm_sendbuffer(200, CT_JSON, String(buffer));
 }
 
 /**
@@ -263,28 +264,28 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wm_sendbuffer(200, CT_JSON, buffer);
+  wm_sendbuffer(200, CT_JSON, String(buffer));
 }
 
 void setup_web_handlers(size_t channel_count) {
   // pucgenie: Don't use F() for map keys.
 
   // keep default portal
-  //wifiManager->server->on("/", handleGETRoot );
+  //wifiManager.server->on("/", handleGETRoot );
   
-  wifiManager->server->on("/debug", HTTP_GET, handleGETDebug);
-  wifiManager->server->on("/settings", HTTP_GET, handleGETSettings);
-  wifiManager->server->on("/settings", HTTP_POST, handlePOSTSettings);
-  wifiManager->server->on("/reset", HTTP_POST, handlePOSTReset);
+  wifiManager.server->on("/debug", HTTP_GET, handleGETDebug);
+  wifiManager.server->on("/settings", HTTP_GET, handleGETSettings);
+  wifiManager.server->on("/settings", HTTP_POST, handlePOSTSettings);
+  wifiManager.server->on("/reset", HTTP_POST, handlePOSTReset);
   char _channelPath[] = "/channel/#";
   do {
     _channelPath[sizeof(_channelPath) / sizeof(_channelPath[0]) - 2] = '0' + channel_count;
-    wifiManager->server->on(_channelPath, HTTP_PUT, std::bind(&handlePUTChannel, channel_count));
-    wifiManager->server->on(_channelPath, HTTP_GET, std::bind(&handleGETChannel, channel_count));
+    wifiManager.server->on(_channelPath, HTTP_PUT, std::bind(&handlePUTChannel, channel_count));
+    wifiManager.server->on(_channelPath, HTTP_GET, std::bind(&handleGETChannel, channel_count));
   } while (channel_count-- != 0);
   /* wifiManager can do better.
-  wifiManager->server->onNotFound([]() {
-    wifiManager->server->send(404, CT_TEXT, F("Not found\r\n"));
+  wifiManager.server->onNotFound([]() {
+    wifiManager.server->send(404, CT_TEXT, F("Not found\r\n"));
   });
   */
 }

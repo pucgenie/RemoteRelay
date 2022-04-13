@@ -40,18 +40,23 @@ char buffer[BUF_SIZE];
 #include "syntacticsugar.h"
 
 //ESP8266WebServer server(80);
-// contained in wifiManager->server->
+// contained in wifiManager.server->
 
-RemoteRelaySettings settings = RemoteRelaySettings();
+RemoteRelaySettings settings;
 Logger logger;
 bool shouldSaveConfig = false;
 MyLoopState myLoopState = AFTER_SETUP;
 MyWiFiState myWiFiState = MYWIFI_OFF;
 MyWebState myWebState = WEB_DISABLED;
 /**
- * WeFiManagerParameters can't be removed so deleting the whole object is necessary.
+ * WiFiManagerParameters can't be removed so deleting the whole object is necessary.
 **/
-WiFiManager * const wifiManager = new WiFiManager();
+/**
+ * How to deconstruct and re-initialize: https://stackoverflow.com/a/2166155/2714781
+wifiManager.~WiFiManager();
+new(&wifiManager) WiFiManager();
+**/
+WiFiManager wifiManager;
 static AsyncPing ping;
 static const __FlashStringHelper *serial_response_next = NULL;
 // TODO: should be configurable
@@ -61,7 +66,7 @@ static IPAddress isp_endpoint(8,8,8,8);
 static ATReplies atreplies = ATReplies();
 #endif
 
-static uint8_t channels[] = {
+static int8_t channels[] = {
     MODE_OFF
   , MODE_OFF
 #ifdef FOUR_WAY_MODE
@@ -82,7 +87,7 @@ static uint16_t settings_offset = 0;
  * General helpers 
  ********************************************************************************/
 
-void setChannel(uint8_t channel, uint8_t mode) {
+void setChannel(uint8_t channel, int8_t mode) {
   byte payload[4];
   
   // Header
@@ -143,33 +148,39 @@ size_t getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
   return snstatus;
 }
 
-void configModeCallback(WiFiManager *myWiFiManager) {
-  
-}
+//void configModeCallback(WiFiManager *myWiFiManager) {
+//  
+//}
 
 /**
  * 
 **/
 void configureWebParams() {
+  // mind static keyword - effective global.
   static WiFiManagerParameter webparams[] = {
-    WiFiManagerParameter("login",      "HTTP Login",    settings.login, AUTHBASIC_LEN_USERNAME),
-    WiFiManagerParameter("password",   "HTTP Password", settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/),
-    WiFiManagerParameter("ssid",       "AP mode SSID",  settings.ssid, LENGTH_SSID),
+    WiFiManagerParameter("login",      "HTTP Login",      settings.login, AUTHBASIC_LEN_USERNAME),
+    WiFiManagerParameter("password",   "HTTP Password",   settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/),
+    WiFiManagerParameter("ssid",       "AP mode SSID",    settings.ssid, LENGTH_SSID),
     WiFiManagerParameter("wpa_key",    "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY),
     WiFiManagerParameter("webservice", "Webservice", bool2str(settings.flags.webservice), 5, "placeholder=\"webservice\" type=\"checkbox\""),
     WiFiManagerParameter("wifimanager_portal", "WiFiManager Portal in STA mode", bool2str(settings.flags.wifimanager_portal), 5, "placeholder=\"wifimanager_portal\" type=\"checkbox\""),
   };
+#ifdef WIFIMANAGER_HAS_SETPARAMETERS
+  // WiFiManager v2.0.9 is built around an array with POINTERS (WiFiManagerParameter*[])... Wouldn't work without changing a few things.
+  wifiManager.setParameters(&webparams);
+#else
   for (WiFiManagerParameter &x : webparams) {
-    wifiManager->addParameter(&x);
+    wifiManager.addParameter(&x);
   }
+#endif
 }
 
 void setup()  {
   Serial.begin(115200);
   
-  // TODO: align to 256 Byte programmable blocks
+  // TODO: align to 256-Byte programmable pages (FLASH_PAGE_SIZE)
   // e.g. map 1st block, if invalid map 2nd...16th block. If 16th block is to be invalidated, erase 4K page and start from 1st block.
-  EEPROM.begin(256);
+  EEPROM.begin(FLASH_SECTOR_SIZE);
   
   // Load settings from flash
   if (settings.loadSettings(settings_offset)) {
@@ -180,25 +191,24 @@ void setup()  {
   // nop - don't need to save defaults in error case because they can be restored anytime. Save write cycles.
   
   // These are setters without unwanted side-effects.
-  wifiManager->setConfigPortalBlocking(false);
-  wifiManager->setRemoveDuplicateAPs(true);
+  wifiManager.setConfigPortalBlocking(false);
+  wifiManager.setRemoveDuplicateAPs(true);
 
-  // Be sure the relay are in the default state (NC, off)
+  // Be sure the relays are in the default state (NC, off)
   #pragma clang loop unroll(full)
-  #pragma GCC unroll 4
-  for (uint8_t i = sizeof(channels); i > 0; --i) {
+  //#pragma GCC unroll 4
+  for (int8_t i = sizeof(channels); i > 0; --i) {
     // pucgenie: (i, --i) would violate -Wsequence-point
     setChannel(i, channels[i - 1]);
   }
 
   // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
-  // Configure custom parameters, store in HEAP (new). Maybe just make them static...
   configureWebParams();
-  wifiManager->setSaveConfigCallback([](){
+  wifiManager.setSaveConfigCallback([](){
     shouldSaveConfig = true;
   });
   
-  wifiManager->setAPCallback(configModeCallback);
+  //wifiManager.setAPCallback(configModeCallback);
   
   #ifdef DISABLE_NUVOTON_AT_REPLIES
   myWiFiState = AUTO_REQUESTED;
@@ -281,29 +291,25 @@ void loop() {
 
   switch (myWiFiState) {
     case AP_REQUESTED:
-      wifiManager->disconnect();
-      wifiManager->setCaptivePortalEnable(true);
+      wifiManager.disconnect();
+      wifiManager.setCaptivePortalEnable(true);
       WiFi.mode(WIFI_AP);
-      wifiManager->setEnableConfigPortal(true);
-      wifiManager->setSaveConnect(false);
-      wifiManager->startConfigPortal(settings.ssid, settings.wpa_key);
+      wifiManager.setEnableConfigPortal(true);
+      wifiManager.setSaveConnect(false);
+      wifiManager.startConfigPortal(settings.ssid, settings.wpa_key);
       myWiFiState = AP_MODE;
     break;
     case DO_AUTOCONNECT: {
-      if (settings.flags.wifimanager_portal) {
-        wifiManager->setSaveConnect(false);
-        wifiManager->setEnableConfigPortal(true);
-      } else {
-        wifiManager->setEnableConfigPortal(false);
-      }
+      wifiManager.setSaveConnect(settings.flags.wifimanager_portal);
+      wifiManager.setEnableConfigPortal(!settings.flags.wifimanager_portal);
       // FIXME: enable in AP mode
-      //wifiManager->setCaptivePortalEnable(false);
+      //wifiManager.setCaptivePortalEnable(false);
       // Connect to Wifi or ask for SSID
-      bool res = wifiManager->autoConnect(settings.ssid, settings.wpa_key);
+      bool res = wifiManager.autoConnect(settings.ssid, settings.wpa_key);
       /*
-      wifiManager->setConfigPortalTimeout(timeout);
-      wifiManager->startConfigPortal(settings.ssid);
-      wifiManager->startWebPortal();
+      wifiManager.setConfigPortalTimeout(timeout);
+      wifiManager.startConfigPortal(settings.ssid);
+      wifiManager.startWebPortal();
       */
       if (res) {
         myWiFiState = STA_MODE;
@@ -316,14 +322,14 @@ void loop() {
     }
     break;
     case STA_REQUESTED: {
-      //wifiManager->setCaptivePortalEnable(false);
-      wifiManager->disconnect();
+      //wifiManager.setCaptivePortalEnable(false);
+      wifiManager.disconnect();
       WiFi.mode(WIFI_STA);
       myWiFiState = DO_AUTOCONNECT;
     }
     break;
     case AUTO_REQUESTED: {
-      wifiManager->disconnect();
+      wifiManager.disconnect();
       WiFi.mode(WIFI_AP_STA);
       myWiFiState = DO_AUTOCONNECT;
     }
@@ -356,7 +362,7 @@ void loop() {
       }
       
       if (settings.flags.wifimanager_portal || (myWiFiState == AP_MODE && (!settings.flags.webservice))) {
-        wifiManager->startWebPortal();
+        wifiManager.startWebPortal();
       }
       logger.info(F("{'HTTPServer': 'started'}"));
       
@@ -368,7 +374,7 @@ void loop() {
       /* now handled by wifiManager portal server service
       server.handleClient();
       */
-      wifiManager->process();
+      wifiManager.process();
       if (shouldSaveConfig) {
         myLoopState = SAVE_SETTINGS;
       }
@@ -380,6 +386,10 @@ void loop() {
   }
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
+  if (serial_response_next) {
+    Serial.println(serial_response_next);
+    serial_response_next = NULL;
+  }
   if (myLoopState == AFTER_SETUP) {
     // don't accept serial commands if some action is queued. We have enought time to react at next loop iteration.
     static MyATCommand at_previous = INVALID_EXPECTED_AT, at_current;
@@ -388,6 +398,7 @@ void loop() {
       switch (at_current = atreplies.handle_nuvoTon_comms(logger)) {
         case AT_RESTORE: {
           myLoopState = RESTORE;
+          //serial_response_next = F("OK");
         }
         break;
         case AT_RST: {

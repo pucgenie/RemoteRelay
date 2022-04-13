@@ -26,9 +26,32 @@ uint8_t binarysearchString(const String table[], const String value, uint8_t upp
   uint8_t lowerBound = 0;
   uint8_t pivot = upperBound / 2;
   while (lowerBound != upperBound) {
-    String elem = table[pivot];
+    const String elem = table[pivot];
     // TODO: pucgenie: what data type does compareTo return??
     int diff = value.compareTo(elem);
+    if (diff == 0) {
+return pivot;
+    }
+    if (diff > 0) {
+      lowerBound = pivot + 1;
+    } else // assert if (diff < 0)
+    {
+      upperBound = pivot - 1;
+    }
+    pivot = lowerBound + (upperBound - lowerBound) / 2;
+  }
+  return -pivot - 1;
+}
+
+// non-DRY
+uint8_t binarysearchChars(const char *table[], const char *value, uint8_t upperBound, size_t max_str_len) {
+  //assert table != NULL && value != NULL
+  uint8_t lowerBound = 0;
+  uint8_t pivot = upperBound / 2;
+  while (lowerBound != upperBound) {
+    const char *elem = table[pivot];
+    // TODO: pucgenie: what data type does str_cmp return??
+    int diff = strncmp(value, elem, max_str_len);
     if (diff == 0) {
 return pivot;
     }

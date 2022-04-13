@@ -29,37 +29,33 @@
 #define LENGTH_SSID 32
 #define LENGTH_WPA_KEY 64
 
-union U_SETTINGS_FLAGS {
-  struct {
-    /**
-      * Count the number of zeroes to rush along the linked list.
-      * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
-      * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
-      */
-    int16_t wearlevel_mark    :4;
-    /**
-      * Output debug messages
-    **/
-    int16_t debug             :1;
-    /**
-      * Log output to serial port
-    **/
-    int16_t serial            :1;
-    /**
-      * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
-        AT+CIPMUX=1
-        AT+CIPSERVER=1,8080
-        AT+CIPSTO=360
-      *
-      * If disabled, µC may sleep between ping pong intervals.
-      */
-    int16_t webservice        :1;
-    int16_t wifimanager_portal:1;
+struct ST_SETTINGS_FLAGS {
+  /**
+    * Count the number of zeroes to rush along the linked list.
+    * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
+    * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
+    */
+  int16_t wearlevel_mark    :4 { ~0 };
+  /**
+    * Output debug messages
+  **/
+  int16_t debug             :1 { false };
+  /**
+    * Log output to serial port
+  **/
+  int16_t serial            :1 { false };
+  /**
+    * If set, webservice will be brought up on nuvoTon serial command or on boot if compiled with DISABLE_NUVOTON_AT_REPLIES:
+      AT+CIPMUX=1
+      AT+CIPSERVER=1,8080
+      AT+CIPSTO=360
+    *
+    * If disabled, µC may sleep between ping pong intervals.
+    */
+  int16_t webservice        :1 { true };
+  int16_t wifimanager_portal:1 { true };
 
-    int16_t erase_cycles      :8;
-  };
-  // each member needs to have the same type that the full bitfield has
-  int16_t reg;
+  int16_t erase_cycles      :8 { 0 };
 };
 
 /**
@@ -67,7 +63,7 @@ union U_SETTINGS_FLAGS {
  */
 class RemoteRelaySettings {
   public:
-    union U_SETTINGS_FLAGS flags;
+    struct ST_SETTINGS_FLAGS flags;
     
     char login[AUTHBASIC_LEN_USERNAME+1];
     char password[AUTHBASIC_LEN_PASSWORD+1];
@@ -86,7 +82,6 @@ class RemoteRelaySettings {
     
   public:
   
-    RemoteRelaySettings();
     bool loadSettings(uint16_t &the_address);
     void saveSettings(uint16_t &p_settings_offset);
     /**
@@ -94,10 +89,13 @@ class RemoteRelaySettings {
     */
     static void eeprom_destroy_crc(uint16_t &old_addr);
     /**
-     * CRC8 simple calculation
-     * Based on https://github.com/PaulStoffregen/OneWire/blob/master/OneWire.cpp
+     * CRC16 simple calculation
+     * Based on CRC8 https://github.com/PaulStoffregen/OneWire/blob/master/OneWire.cpp
+     * implementing polynomial 17 bits https://users.ece.cmu.edu/~koopman/crc/ 0x16FA7 >> 1
+     * NOT IMPLEMENTED.
+     * Rolled back to crc8.
     **/
-    static uint8_t crc8(const uint8_t *addr, uint8_t len);
+    static uint8_t crc8(const uint8_t *addr, size_t len);
   
   private:
   

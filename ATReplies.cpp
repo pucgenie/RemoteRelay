@@ -22,6 +22,7 @@
 
 #include "ATReplies.h"
 #include "Logger.h"
+#include "divideandconquer.h"
 
 #include "syntacticsugar.h"
 
@@ -63,7 +64,7 @@
  * Then continues exactly like CWMODE=2 (and changes to red led)
  * 
  * 
- * === Other commands found in original firmware
+ * === Other command strings found in original firmware
  * AT+CWJAP:%d
  * AT+CIPUPDATE:2
  * AT+CIPUPDATE:3
@@ -73,6 +74,8 @@
  * AT+SLEEP
  * ...
  */
+
+ATReplies::COMMAND_STRINGS = 
 
 MyATCommand ATReplies::handle_nuvoTon_comms(Logger &logger) {
   // Let's hope that communication doesn't get interrupted and that it doesn't take too long.
@@ -98,6 +101,6 @@ return INVALID_EXPECTED_AT;
   return AT_RST;
 }
 
-void ATReplies::answer_ok(Logger &logger) {
+inline void ATReplies::answer_ok(Logger &logger) {
   Serial.println("OK");
 }

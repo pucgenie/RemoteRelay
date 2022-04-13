@@ -98,9 +98,9 @@ extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
 extern MyLoopState myLoopState;
 extern MyWiFiState myWiFiState;
 extern MyWebState myWebState;
-extern WiFiManager * const wifiManager;
+extern WiFiManager wifiManager;
 
-void setChannel(uint8_t channel, uint8_t mode);
+void setChannel(uint8_t channel, int8_t mode);
 //void saveSettings(RemoteRelaySettings &p_settings, uint16_t &p_settings_offset);
 void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.

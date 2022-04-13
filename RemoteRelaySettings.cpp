@@ -24,18 +24,18 @@
 #include "ledsignalling.h"
 #include "RemoteRelay.h"
 
+extern "C" {
 #include <spi_flash.h>
-// modded to support 256 Byte writes 16 times in one 4K erase sector
+}
+// modded to support 256 Byte page writes 16 times in one 4K erase sector
 #include "EEPROM.h"
 
 #include "Logger.h"
 
-RemoteRelaySettings::RemoteRelaySettings() {
-  
-}
-
+// object size plus crc8
 #define SETTINGS_FALSH_SIZE sizeof(RemoteRelaySettings)+1
 #define SETTINGS_FALSH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FALSH_SIZE)
+#define SETTINGS_FALSH_WEARLEVEL_MARK_BITS GET_BIT_FIELD_WIDTH(ST_SETTINGS_FLAGS, wearlevel_mark)
 
 /**
  * Reads settings from EEPROM flash into p_settings.
@@ -51,13 +51,13 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
     EEPROM.get(the_address, p_settings);
     // check if marked as deleted and how many bits are set 0
     x = p_settings.flags.wearlevel_mark;
-    if (x < ((1<<GET_BIT_FIELD_WIDTH(U_SETTINGS_FLAGS, wearlevel_mark)) - 1)) {
+    if (x < ((1<<SETTINGS_FALSH_WEARLEVEL_MARK_BITS) - 1)) {
       #pragma clang loop unroll(full)
-      #pragma GCC unroll 8
-      for (int nb = GET_BIT_FIELD_WIDTH(U_SETTINGS_FLAGS, wearlevel_mark); nb --> 0; ) {
+      //#pragma GCC unroll 8
+      for (int nb = SETTINGS_FALSH_WEARLEVEL_MARK_BITS; nb --> 0; ) {
         // some way to spare one instruction?^^
-        if (x & (1<<nb) == 0) {
-          the_address += sizeof(RemoteRelaySettings) + 1;
+        if ((x & (1<<nb)) == 0) {
+          the_address += SETTINGS_FALSH_SIZE;
         }
       }
     } else if (crc8((uint8_t*) &p_settings, sizeof(RemoteRelaySettings)) == uint8_t(EEPROM.read(the_address + sizeof(RemoteRelaySettings)))) {
@@ -65,7 +65,7 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
       EEPROM.get(the_address, p_settings);
   break;
     } else {
-      the_address += sizeof(RemoteRelaySettings) + 1;
+      the_address += SETTINGS_FALSH_SIZE;
     }
   }
   if (!ret) {
@@ -122,15 +122,16 @@ void RemoteRelaySettings::saveSettings(uint16_t &p_settings_offset) {
 
 #undef SETTINGS_FALSH_OVERADDR
 #undef SETTINGS_FALSH_SIZE
+#undef SETTINGS_FALSH_WEARLEVEL_MARK_BITS
 
-uint8_t RemoteRelaySettings::crc8(const uint8_t *addr, uint8_t len) {
+uint8_t RemoteRelaySettings::crc8(const uint8_t *addr, size_t len) {
   uint8_t crc = 0;
 
   while (len--) {
     uint8_t inbyte = *addr++;
     #pragma clang loop unroll(full)
     #pragma GCC unroll 8
-    for (uint8_t i = 8; i; --i) {
+    for (uint8_t i = 8; i --> 0;) {
       uint8_t mix = (crc ^ inbyte) & 0x01;
       crc >>= 1;
       if (mix) {

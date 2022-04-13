@@ -24,4 +24,6 @@
 
 uint8_t binarysearchString(const String table[], const String value, uint8_t upperBound);
 
+uint8_t binarysearchChars(const char *table[], const char *value, uint8_t upperBound, size_t max_str_len);
+
 #endif  // DIVIDEANDCONQUER_H

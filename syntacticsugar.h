@@ -43,4 +43,6 @@
         return bitCount; \
     }()
 
+#define RE_INIT_OBJECT(CLAZZ, VARIABLE) VARIABLE.~CLAZZ(); new (&VARIABLE) CLAZZ();
+
 #endif  // SYNTACTICSUGAR_H
