@@ -27,9 +27,9 @@
 #include "RemoteRelay.h"
 #include "syntacticsugar.h"
 
-#include "divideandconquer.h"
+#include "divideandconquer_01.h"
 
-static /*PGM_P*/ const char CT_JSON[] PROGMEM = "application/json";
+static const char CT_JSON[] = "application/json";
 static const char CT_TEXT[] = "text/plain";
 
 // define enum stringlist https://stackoverflow.com/a/10966395
@@ -44,16 +44,21 @@ static const char CT_TEXT[] = "text/plain";
         FRUIT(wpa_key)            \
 
 #define GENERATE_ENUM(ENUM) WEB_PARAM_##ENUM,
-#define GENERATE_STRING(STRING) #STRING,
 
 enum ENUM_WEB_PARAM {
     FOREACH_FRUIT(GENERATE_ENUM)
 };
 
+#undef GENERATE_ENUM
+#define GENERATE_STRING(STRING) #STRING,
+
 // pucgenie: Is the overhead relevant?
 static const String WEB_PARAM[] = {
     FOREACH_FRUIT(GENERATE_STRING)
 };
+
+#undef GENERATE_STRING
+#undef FOREACH_FRUIT
 
 bool isAuthBasicOK() {
   // Disable auth if not credential provided
@@ -84,12 +89,6 @@ return;
   //delete &fromLog;
 }
 
-#define wm_sendbuffer(x, ct, buffer)             \
-  /* compile-time special case */                \
-  char cxt_tmp[sizeof(ct) / sizeof(*ct)];        \
-  strcpy_P(cxt_tmp, ct);                         \
-  wifiManager.server->send(x, cxt_tmp, buffer);  \
-
 /**
  * GET /settings
  */
@@ -99,9 +98,10 @@ return;
   }
   // stack, no fragmentation
   char buffer[BUF_SIZE];
-  getJSONSettings(buffer, BUF_SIZE);
-  
-  wm_sendbuffer(200, CT_JSON, String(buffer));
+  if (getJSONSettings(buffer, BUF_SIZE) > BUF_SIZE) {
+    // TODO: tell that something broke
+  }
+  wifiManager.server->send(200, CT_JSON, String(buffer));
 }
 
 
@@ -125,9 +125,14 @@ return;
   // Parse args   
   for (uint8_t i = wifiManager.server->args(); i --> 0; ) {
     String param = wifiManager.server->argName(i);
-    switch (binarysearchString(WEB_PARAM, param, sizeof(WEB_PARAM))) {
+    size_t idxOut;
+    if (!DivideAndConquer01::binarysearchString(idxOut, WEB_PARAM, param, sizeof(WEB_PARAM))) {
+      wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
+return;
+    }
+    switch () {
       default: {
-        wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
+        wifiManager.server->send(400, CT_TEXT, "Unimplemented parameter: " + param + "\r\n");
 return;
       }
       case WEB_PARAM_debug: { // debug
@@ -188,8 +193,10 @@ return;
   // Reply with current settings
   // stack, no fragmentation
   char buffer[BUF_SIZE];
-  getJSONSettings(buffer, BUF_SIZE);
-  wm_sendbuffer(201, CT_JSON, String(buffer));
+  if (getJSONSettings(buffer, BUF_SIZE) > BUF_SIZE) {
+    // TODO: tell that something broke
+  }
+  wifiManager.server->send(201, CT_JSON, String(buffer));
 }
 
 /**
@@ -228,7 +235,7 @@ return;
   // Check if args have been supplied
   // Check if requested arg has been suplied
   if (wifiManager.server->args() != 1 || wifiManager.server->argName(0) != "mode") {
-    wifiManager.server->send(400, CT_TEXT, F("Invalid parameter\r\n"));
+    wifiManager.server->send(400, CT_JSON, F("{'invalidParameter': 'mode expected'}"));
 return;
   }
 
@@ -239,7 +246,10 @@ return;
   } else if (value.equalsIgnoreCase("off")) {
     requestedMode = MODE_OFF;
   } else {
-    wifiManager.server->send(400, CT_TEXT, "Invalid value: " + value + "\r\n");
+    String msg = "{'invalid': ";
+    msg.concat(value);
+    msg.concat("}");
+    wifiManager.server->send(400, CT_JSON, msg);
 return;
   } 
 
@@ -249,9 +259,7 @@ return;
 
   setChannel(channel, requestedMode);
   // stack, no fragmentation
-  char buffer[BUF_SIZE];
-  getJSONState(channel, buffer, BUF_SIZE);
-  wm_sendbuffer(200, CT_JSON, String(buffer));
+  handleGETSettings();
 }
 
 /**
@@ -264,7 +272,7 @@ return;
   // stack, no fragmentation
   char buffer[BUF_SIZE];
   getJSONState(channel, buffer, BUF_SIZE);
-  wm_sendbuffer(200, CT_JSON, String(buffer));
+  wifiManager.server->send(200, CT_JSON, String(buffer));
 }
 
 void setup_web_handlers(size_t channel_count) {

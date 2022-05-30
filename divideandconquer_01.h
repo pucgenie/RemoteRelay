@@ -17,13 +17,14 @@
  *
  * ***********************************************************************/
 
-#ifndef DIVIDEANDCONQUER_H
-#define DIVIDEANDCONQUER_H
+#ifndef DIVIDEANDCONQUER01_H
+#define DIVIDEANDCONQUER01_H
 
 #include "Arduino.h"
 
-uint8_t binarysearchString(const String table[], const String value, uint8_t upperBound);
-
-uint8_t binarysearchChars(const char *table[], const char *value, uint8_t upperBound, size_t max_str_len);
-
-#endif  // DIVIDEANDCONQUER_H
+class DivideAndConquer01 {
+    public:
+        bool binarysearchString(size_t &pivot, const String table[], const String value, size_t upperBound);
+        bool binarysearchChars(size_t &pivot, const char* table[], const char *value, size_t upperBound, size_t max_str_len);
+}
+#endif  // DIVIDEANDCONQUER01_H

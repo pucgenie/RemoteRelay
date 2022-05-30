@@ -1,0 +1,32 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\cores\\esp8266",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\tools\\sdk\\include",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\tools\\xtensa-lx106-elf-gcc\\3.0.4-gcc10.3-1757bed\\xtensa-lx106-elf\\include",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\variants\\generic",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\libraries\\DNSServer\\src",
+                "C:\\Users\\pucge\\Documents\\Arduino\\libraries\\WiFiManager",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\libraries\\ESP8266WiFi\\src",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\tools\\sdk\\lwip2\\include",
+                "C:\\Users\\pucge\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\3.0.2\\libraries\\ESP8266WebServer\\src"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "ESP8266",
+                "__attribute__()=inline"
+            ],
+            "windowsSdkVersion": "10.0.19041.0",
+            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio 2019 Community/VC/Tools/MSVC/14.29.30133/bin/Hostx64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}

@@ -61,6 +61,7 @@ void Logger::logNow(const char* p_buffer) {
   // Add timestamp header
   uint32_t uptime = millis();
   // pucgenie: don't use F() here.
+  // Standard compilers recognize DIV and modulo and optimize if supported by hardware.
   snprintf(ringlog[index], BUF_LEN, "[%04d.%03d] ", uptime / 1000, uptime % 1000);
   strncpy(ringlog[index] + 11, p_buffer, BUF_LEN - 11);
   
@@ -86,15 +87,18 @@ void Logger::log(const __FlashStringHelper *fmt, va_list ap) {
 void Logger::getLog(String &msg) {
   // Get uptime
   char uptime[9];
-  int sec = millis() / 1000;
-  int min = sec / 60;
-  int hour = min / 60;
-  // pucgenie: Don't use F() here.
+  // pucgenie: microoptimization: Don't use F() here.
   // TODO: Handle return code.
-  snprintf(uptime, sizeof(uptime), "%02d:%02d:%02d", hour, min % 60, sec % 60);
+  if (snprintf(uptime, sizeof(uptime), "%08d", millis() / 1000) >= sizeof(uptime)) {
+    // can't use logger...
+    Serial.println(F("Time formatting broken. Continuing anyway..."));
+  }
 
   // pucgenie: Don't worry about a few wasted CPU cycles to do that everytime.
-  msg.reserve(255);
+  if (!msg.reserve(255)) {
+    // can't use logger...
+    Serial.println(F("Couldn't reserve String buffer. Continuing anyway..."));
+  }
   // Generate header
   msg += " ==== DEBUG LOG ====";
   msg += "\r\nChip ID: ";

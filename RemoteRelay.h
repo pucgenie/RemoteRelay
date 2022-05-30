@@ -87,6 +87,13 @@ enum MyWebState {
   WEB_DISABLED,
 };
 
+enum MyPingState {
+  PING_NONE,
+  PING_BACKGROUND,
+  PING_RECEIVED,
+  PING_TIMEOUT,
+};
+
 #define BUF_SIZE 384            // Used for string buffers
 extern char buffer[];             // Global char* to avoid multiple String concatenation which causes RAM fragmentation
 
@@ -98,9 +105,15 @@ extern bool shouldSaveConfig;    // Flag for WifiManager custom parameters
 extern MyLoopState myLoopState;
 extern MyWiFiState myWiFiState;
 extern MyWebState myWebState;
+extern MyPingState myPingState;
 extern WiFiManager wifiManager;
 
-void setChannel(uint8_t channel, int8_t mode);
+enum RSTM32Mode {
+  R_OPEN  = 0,
+  R_CLOSE = 1,
+}
+
+void setChannel(uint8_t channel, RSTM32Mode mode);
 //void saveSettings(RemoteRelaySettings &p_settings, uint16_t &p_settings_offset);
 void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.

@@ -75,30 +75,37 @@
  * ...
  */
 
-ATReplies::COMMAND_STRINGS = 
+
 
 MyATCommand ATReplies::handle_nuvoTon_comms(Logger &logger) {
   // Let's hope that communication doesn't get interrupted and that it doesn't take too long.
-  String stringIn = Serial.readStringUntil('\n');
-  if (stringIn.length() == 0) {
+  // TODO: Use SafeString library / asynchronous Serial reading?
+  const String stringIn = Serial.readStringUntil('\n');
+  const size_t strInLen = stringIn.length();
+  if (strInLen == 0) {
     logger.logNow("{'error': 'empty line on serial encountered'}");
 return INVALID_EXPECTED_AT;
   }
-  char tmpStr[stringIn.length() + 1];
-  stringIn.toCharArray(tmpStr, stringIn.length());
-  tmpStr[stringIn.length()] = '\0';
-  logger.debug(F("{'Serial_received': '%s'}"), tmpStr);
+//  {
+//    char tmpStr[strInLen + 1];
+//    stringIn.toCharArray(tmpStr, strInLen);
+//    tmpStr[strInLen] = '\0';
+//    logger.debug(F("{'Serial_received': '%s'}"), tmpStr);
+//  }
+  if (!stringIn.startsWith("AT+")) {
+    logger.debug(F("{'error': 'unexpected input', 'rawdata': '%s'}"), stringIn);
+return INVALID_EXPECTED_AT;
+  }
+  static const char* COMMAND_STRINGS[] = {
+    "A",
+    "B",
+    "C",
+  };
+  size_t ret = DivideAndConquer01::binarysearchString(COMMAND_STRINGS, stringIn.substring(3), sizeof(COMMAND_STRINGS));
+  if (ret >= 0) {
+return (MyATCommand) ret;
+  }
 
-  if (stringIn.indexOf("AT+RST") != -1) {
-    // pretend we reset (wait a bit then send the WiFi connected message)
-    delay(10);
-    Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
-  }
-  if (stringIn.indexOf("AT+") > -1) {
-    
-  }
-  // FIXME: just to compile now. REMOVE THIS!
-  return AT_RST;
 }
 
 inline void ATReplies::answer_ok(Logger &logger) {

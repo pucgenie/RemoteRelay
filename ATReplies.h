@@ -42,7 +42,7 @@ enum MyATCommand {
 class ATReplies {
   private:
     static int cwmode;
-    static char[] COMMAND_STRINGS;
+//    static const char* COMMAND_STRINGS[];
     
   public:
     static MyATCommand handle_nuvoTon_comms(Logger &logger);

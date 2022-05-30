@@ -48,6 +48,7 @@ bool shouldSaveConfig = false;
 MyLoopState myLoopState = AFTER_SETUP;
 MyWiFiState myWiFiState = MYWIFI_OFF;
 MyWebState myWebState = WEB_DISABLED;
+MyPingState myPingState = PING_NONE;
 /**
  * WiFiManagerParameters can't be removed so deleting the whole object is necessary.
 **/
@@ -86,23 +87,22 @@ static uint16_t settings_offset = 0;
 /**
  * General helpers 
  ********************************************************************************/
+struct RSTM32Payload {
+  uint8_t header   :8 {0xA0};
+  uint8_t channel  :8;
+  RSTM32Mode mode  :8;
+  uint8_t checksum :8;
+};
 
-void setChannel(uint8_t channel, int8_t mode) {
-  byte payload[4];
+void setChannel(uint8_t channel, RSTM32Mode mode) {
+  struct RSTM32Payload payload;
   
-  // Header
-  payload[0] = 0xA0;
-  
-  // Select the channel
-  payload[1] = channel;
-  
-  // Set the mode
-  //  * 0 = open (off)
-  //  * 1 = close (on)
-  payload[2] = mode;
+  payload.channel = channel;
+
+  payload.mode = mode;
   
   // Compute checksum
-  payload[3] = payload[0] + payload[1] + payload[2];
+  payload.checksum = payload.header + payload.channel + ((int) payload.mode);
   
   static_assert(sizeof(channels) <= 9, "print functions are restricted to one-digit channel count");
   // Save status 
@@ -116,7 +116,7 @@ void setChannel(uint8_t channel, int8_t mode) {
   yield();
   
   // Send hex payload
-  Serial.write(payload, sizeof(payload));
+  Serial.write((const uint8_t *) &payload, sizeof(payload));
   
   if (settings.flags.serial) {
     Serial.println(""); // Clear the line for log output
@@ -125,7 +125,7 @@ void setChannel(uint8_t channel, int8_t mode) {
 
 size_t getJSONSettings(char p_buffer[], size_t bufSize) {
   //Generate JSON 
-  size_t snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","password":"<hidden>","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
+  size_t snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
 )=="==")
     , settings.login
     , bool2str(settings.flags.debug)
@@ -403,6 +403,9 @@ void loop() {
         break;
         case AT_RST: {
           myLoopState = RESET;
+            // pretend we reset (wait a bit then send the WiFi connected message)
+            delay(10);
+            Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
         }
         break;
         case AT_CWMODE_1: {
