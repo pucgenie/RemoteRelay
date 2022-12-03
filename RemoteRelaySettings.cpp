@@ -38,19 +38,17 @@ extern "C" {
 #define SETTINGS_FALSH_WEARLEVEL_MARK_BITS GET_BIT_FIELD_WIDTH(ST_SETTINGS_FLAGS, wearlevel_mark)
 
 /**
- * Reads settings from EEPROM flash into p_settings.
+ * Reads settings from EEPROM flash into this object.
  * Returns the byte start location of the loaded settings block.
  * 
  * @param the_address Should be 0 to load the first valid settings block. Can be an exact address too.
  */
 bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
-  RemoteRelaySettings &p_settings = *this;
-  int x;
   bool ret;
   while (ret = (the_address < (SETTINGS_FALSH_OVERADDR))) {
-    EEPROM.get(the_address, p_settings);
+    EEPROM.get(the_address, *this);
     // check if marked as deleted and how many bits are set 0
-    x = p_settings.flags.wearlevel_mark;
+    const int x = this->flags.wearlevel_mark;
     if (x < ((1<<SETTINGS_FALSH_WEARLEVEL_MARK_BITS) - 1)) {
       #pragma clang loop unroll(full)
       //#pragma GCC unroll 8
@@ -60,9 +58,9 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
           the_address += SETTINGS_FALSH_SIZE;
         }
       }
-    } else if (crc8((uint8_t*) &p_settings, sizeof(RemoteRelaySettings)) == uint8_t(EEPROM.read(the_address + sizeof(RemoteRelaySettings)))) {
+    } else if (crc8((uint8_t*) this, sizeof(RemoteRelaySettings)) == uint8_t(EEPROM.read(the_address + sizeof(RemoteRelaySettings)))) {
       // index of valid settings found
-      EEPROM.get(the_address, p_settings);
+      EEPROM.get(the_address, *this);
   break;
     } else {
       the_address += SETTINGS_FALSH_SIZE;
@@ -70,17 +68,17 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
   }
   if (!ret) {
     logger.info(F("{'settings': 'loading default'}"));
-    //setDefaultSettings(p_settings);
-    strncpy_P(p_settings.login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME+1);
-    strncpy_P(p_settings.password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD+1);
-    strncpy_P(p_settings.ssid, PSTR(DEFAULT_STANDALONE_SSID), LENGTH_SSID+1);
-    strncpy_P(p_settings.wpa_key, PSTR(DEFAULT_STANDALONE_WPA_KEY), LENGTH_WPA_KEY+1);
-    p_settings.flags.wearlevel_mark = ~0;
-    p_settings.flags.erase_cycles = 0;
-    p_settings.flags.debug = false;
-    p_settings.flags.serial = false;
-    p_settings.flags.wifimanager_portal = true;
-    p_settings.flags.webservice = true;
+    //setDefaultSettings(*this);
+    strncpy_P(this->login, PSTR(DEFAULT_LOGIN), AUTHBASIC_LEN_USERNAME+1);
+    strncpy_P(this->password, PSTR(DEFAULT_PASSWORD), AUTHBASIC_LEN_PASSWORD+1);
+    strncpy_P(this->ssid, PSTR(DEFAULT_STANDALONE_SSID), LENGTH_SSID+1);
+    strncpy_P(this->wpa_key, PSTR(DEFAULT_STANDALONE_WPA_KEY), LENGTH_WPA_KEY+1);
+    this->flags.wearlevel_mark = ~0;
+    this->flags.erase_cycles = 0;
+    this->flags.debug = false;
+    this->flags.serial = false;
+    this->flags.wifimanager_portal = true;
+    this->flags.webservice = true;
     
     led_scream(0b10101010);
     
@@ -90,10 +88,10 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
     logger.info(F("{'settings': 'loaded from flash'}"));
   }
   // could have changed
-  logger.setSerial(p_settings.flags.serial);
+  logger.setSerial(this->flags.serial);
 
   // Display loaded setting on debug
-  if (settings.flags.debug) {
+  if (this->flags.debug) {
     getJSONSettings(buffer, BUF_SIZE);
     logger.logNow(buffer);
   }
@@ -101,21 +99,24 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
 }
 
 void RemoteRelaySettings::saveSettings(uint16_t &p_settings_offset) {
-  RemoteRelaySettings &p_settings = *this;
   #ifdef EEPROM_SPI_NOR_REPROGRAM
   {
     uint16_t old_addr = p_settings_offset;
     RemoteRelaySettings::eeprom_destroy_crc(old_addr);
   }
   #endif
-  uint8_t theCRC = crc8((uint8_t*) &p_settings, sizeof(RemoteRelaySettings));
+  uint8_t theCRC = crc8((uint8_t*) this, sizeof(RemoteRelaySettings));
   p_settings_offset += SETTINGS_FALSH_SIZE;
   if (p_settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
-    p_settings.flags.erase_cycles += 1;
+    this->flags.erase_cycles += 1;
+    // check wrap-around / overflow
+    if (this->flags.erase_cycles == 0) {
+      logger.info(F("{'settings': 'more than 256 erase cycles of settings block reached'}"));
+    }
     p_settings_offset = 0;
     //TODO: erase sector explicitly or keep using EEPROM class' auto-detection?
   }
-  EEPROM.put(p_settings_offset, p_settings);
+  EEPROM.put(p_settings_offset, *this);
   EEPROM.put(p_settings_offset + sizeof(RemoteRelaySettings), theCRC);
   EEPROM.commit();
 }
@@ -142,9 +143,9 @@ uint8_t RemoteRelaySettings::crc8(const uint8_t *addr, size_t len) {
   }
   return crc;
 }
-
-void RemoteRelaySettings::eeprom_destroy_crc(uint16_t &old_addr) {
-  RemoteRelaySettings tmp_settings = RemoteRelaySettings();
+#ifdef EEPROM_SPI_NOR_REPROGRAM
+void RemoteRelaySettings::eeprom_destroy_crc(uint16_t old_addr) {
+  RemoteRelaySettings tmp_settings();
   if (!tmp_settings.loadSettings(old_addr)) {
     // it already is incorrect - nop.
 return;
@@ -209,3 +210,4 @@ return;
     // don't commit
   }
 }
+#endif

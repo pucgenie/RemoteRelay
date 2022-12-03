@@ -32,9 +32,10 @@
 struct ST_SETTINGS_FLAGS {
   /**
     * Count the number of zeroes to rush along the linked list.
-    * Remember: Setting a 1 to a 0 doesn't need to erase the sector (4kiB).
+    * Setting a 1 to a 0 doesn't need to erase the sector (4kiB), or so I thought - depends on flash technology (NOR only?).
     * If it is full (all zeroes), it is not implemented to check those bits in following settings blocks.
     */
+  // TODO: remove
   int16_t wearlevel_mark    :4 { ~0 };
   /**
     * Output debug messages
@@ -55,7 +56,8 @@ struct ST_SETTINGS_FLAGS {
   int16_t webservice        :1 { true };
   int16_t wifimanager_portal:1 { true };
 
-  int16_t erase_cycles      :8 { 0 };
+  // TODO: move out of ST_SETTINGS_FLAGS
+  uint16_t erase_cycles      :8 { 0 };
 };
 
 /**
@@ -64,7 +66,7 @@ struct ST_SETTINGS_FLAGS {
 class RemoteRelaySettings {
   public:
     struct ST_SETTINGS_FLAGS flags;
-    
+    // ensure that no double-quotes get accepted for the login name so we don't have to escape for settings JSON serialization
     char login[AUTHBASIC_LEN_USERNAME+1];
     char password[AUTHBASIC_LEN_PASSWORD+1];
     /**
@@ -84,10 +86,11 @@ class RemoteRelaySettings {
   
     bool loadSettings(uint16_t &the_address);
     void saveSettings(uint16_t &p_settings_offset);
+    #ifdef EEPROM_SPI_NOR_REPROGRAM
     /**
     * write a zero anywhere in CRC to force loading default settings at boot
     */
-    static void eeprom_destroy_crc(uint16_t &old_addr);
+    static void eeprom_destroy_crc(uint16_t old_addr);
     /**
      * CRC16 simple calculation
      * Based on CRC8 https://github.com/PaulStoffregen/OneWire/blob/master/OneWire.cpp
@@ -95,6 +98,7 @@ class RemoteRelaySettings {
      * NOT IMPLEMENTED.
      * Rolled back to crc8.
     **/
+    #endif
     static uint8_t crc8(const uint8_t *addr, size_t len);
   
   private:

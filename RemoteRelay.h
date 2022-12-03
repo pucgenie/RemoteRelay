@@ -95,7 +95,7 @@ enum MyPingState {
 };
 
 #define BUF_SIZE 384            // Used for string buffers
-extern char buffer[];             // Global char* to avoid multiple String concatenation which causes RAM fragmentation
+extern char buffer[2][BUF_SIZE];             // Global char* to avoid multiple String concatenation which causes RAM fragmentation
 
 // Global variables
 //extern ESP8266WebServer server;
@@ -111,7 +111,7 @@ extern WiFiManager wifiManager;
 enum RSTM32Mode {
   R_OPEN  = 0,
   R_CLOSE = 1,
-}
+};
 
 void setChannel(uint8_t channel, RSTM32Mode mode);
 //void saveSettings(RemoteRelaySettings &p_settings, uint16_t &p_settings_offset);

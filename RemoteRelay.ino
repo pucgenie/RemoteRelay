@@ -19,11 +19,37 @@
  *
  * ***********************************************************************/
 
-// hardcoded pinging of 8.8.8.8 to save space and config overhead
+// Johannes: hardcoded pinging of 8.8.8.8 to save space and config overhead
 // AT+RESTORE could change from STA_{WEB,LITE} to AP_REQUESTED
 
 // board manager: "Generic ESP8266 Board" https://randomnerdtutorials.com/how-to-install-esp8266-board-arduino-ide/
 // preferences additional: https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
+
+/**
+If enabled, also remove often used strings from RAM.
+**/
+#if 0
+#define ULTRALOWMEMORY_FUNC snprintf_P
+#define ULTRALOWMEMORY_STR PSTR
+#else
+#define ULTRALOWMEMORY_FUNC snprintf
+#define ULTRALOWMEMORY_STR
+#endif
+
+/**
+If enabled, remove not-that-often-used strings from RAM.
+**/
+#if 1
+#define LOWMEMORY_FUNC snprintf_P
+#define LOWMEMORY_STR PSTR
+#else
+#define LOWMEMORY_FUNC snprintf
+#define LOWMEMORY_STR
+#endif
+
+/**
+Seldomly used strings (subjective measurement) are always PSTR.
+**/
 
 // To control global EEPROM access (begin etc.)
 #include "EEPROM.h"
@@ -32,7 +58,7 @@
 #include <AsyncPing.h>
 
 #include "RemoteRelay.h"
-char buffer[BUF_SIZE];
+char buffer[2][BUF_SIZE];
 
 #include "WebHelper.h"
 #include "ledsignalling.h"
@@ -67,7 +93,7 @@ static IPAddress isp_endpoint(8,8,8,8);
 static ATReplies atreplies = ATReplies();
 #endif
 
-static int8_t channels[] = {
+static RSTM32Mode channels[] = {
     MODE_OFF
   , MODE_OFF
 #ifdef FOUR_WAY_MODE
@@ -95,11 +121,10 @@ struct RSTM32Payload {
 };
 
 void setChannel(uint8_t channel, RSTM32Mode mode) {
-  struct RSTM32Payload payload;
-  
-  payload.channel = channel;
-
-  payload.mode = mode;
+  struct RSTM32Payload payload = {
+    .channel = channel,
+    .mode = mode,
+  };
   
   // Compute checksum
   payload.checksum = payload.header + payload.channel + ((int) payload.mode);
@@ -108,14 +133,15 @@ void setChannel(uint8_t channel, RSTM32Mode mode) {
   // Save status 
   channels[channel - 1] = mode;
   
-  logger.info(F("{'channel': %.1i, 'state': '%.3s'}"), channel, (mode == MODE_ON) ? "on" : "off");
+  logger.info(F("{'channel': %c, 'state': '%.3s'}"), channel + '0', (mode == MODE_ON) ? "on" : "off");
+  // don't want to care about endianness
   logger.debug(F("{'payload': '%02X%02X%02X%02X'}"), payload[0], payload[1], payload[2], payload[3]);
   
   // Give some time to the watchdog
   ESP.wdtFeed();
   yield();
   
-  // Send hex payload
+  // Send payload
   Serial.write((const uint8_t *) &payload, sizeof(payload));
   
   if (settings.flags.serial) {
@@ -123,9 +149,9 @@ void setChannel(uint8_t channel, RSTM32Mode mode) {
   }
 }
 
-size_t getJSONSettings(char p_buffer[], size_t bufSize) {
+size_t getJSONSettings(char *p_buffer, size_t bufSize) {
   //Generate JSON 
-  size_t snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
+  size_t snstatus = snprintf_P(p_buffer, bufSize, LOWMEMORY_STR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
 )=="==")
     , settings.login
     , bool2str(settings.flags.debug)
@@ -137,9 +163,9 @@ size_t getJSONSettings(char p_buffer[], size_t bufSize) {
   return snstatus;
 }
 
-size_t getJSONState(uint8_t channel, char p_buffer[], size_t bufSize) {
+size_t getJSONState(uint8_t channel, char *p_buffer, size_t bufSize) {
   //Generate JSON 
-  size_t snstatus = snprintf_P(p_buffer, bufSize, PSTR(R"=="==({"channel":%.1i,"mode":"%.3s"}
+  size_t snstatus = ULTRALOWMEMORY_FUNC(p_buffer, bufSize, ULTRALOWMEMORY_STR(R"=="==({"channel":%.1i,"mode":"%.3s"}
 )=="==")
     , channel
     , (channels[channel - 1] == MODE_ON) ? "on" : "off"
@@ -274,6 +300,7 @@ void loop() {
       myLoopState = SHUTDOWN_REQUESTED;
     }
     break;
+#ifdef EEPROM_SPI_NOR_REPROGRAM
     case EEPROM_DESTROY_CRC: {
       RemoteRelaySettings::eeprom_destroy_crc(settings_offset);
       // where to commit then?
@@ -281,6 +308,7 @@ void loop() {
       myLoopState = RESTART_REQUESTED;
     }
     break;
+#endif
     case SAVE_SETTINGS: {
       shouldSaveConfig = false;
       settings.saveSettings(settings_offset);

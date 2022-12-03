@@ -21,13 +21,13 @@
 
 //#include "syntacticsugar.h"
 
-bool DivideAndConquer01::binarysearchString(size_t &pivot, const String table[], const String value, size_t upperBound) {
+bool DivideAndConquer01::binarysearchString(size_t &pivot, const String * const table, const String &value, size_t upperBound) {
   //assert table != NULL && value != NULL
   size_t lowerBound = 0;
   pivot = upperBound / 2;
   while (lowerBound != upperBound) {
-    const String elem = table[pivot];
-    // TODO: pucgenie: what data type does compareTo return??
+    const String &elem = table[pivot];
+    // TODO: pucgenie: what abstract data type does compareTo return??
     int diff = value.compareTo(elem);
     if (diff == 0) {
 return true;
@@ -44,12 +44,12 @@ return true;
 }
 
 // non-DRY
-bool DivideAndConquer01::binarysearchChars(size_t &pivot, const char* table[], const char *value, size_t upperBound, size_t max_str_len) {
+bool DivideAndConquer01::binarysearchChars(size_t &pivot, const char * const * const table, const char * const value, size_t upperBound, const size_t max_str_len) {
   //assert table != NULL && value != NULL
   size_t lowerBound = 0;
   pivot = upperBound / 2;
   while (lowerBound != upperBound) {
-    const char *elem = table[pivot];
+    const char * const elem = table[pivot];
     int diff = strncmp(value, elem, max_str_len);
     if (diff == 0) {
 return true;

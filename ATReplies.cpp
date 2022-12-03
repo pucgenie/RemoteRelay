@@ -22,7 +22,7 @@
 
 #include "ATReplies.h"
 #include "Logger.h"
-#include "divideandconquer.h"
+#include "divideandconquer_01.h"
 
 #include "syntacticsugar.h"
 
@@ -96,6 +96,7 @@ return INVALID_EXPECTED_AT;
     logger.debug(F("{'error': 'unexpected input', 'rawdata': '%s'}"), stringIn);
 return INVALID_EXPECTED_AT;
   }
+  
   static const char* COMMAND_STRINGS[] = {
     "A",
     "B",
