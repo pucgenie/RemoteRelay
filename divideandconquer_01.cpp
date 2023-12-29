@@ -1,6 +1,6 @@
 /*************************************************************************
  *
- * Copyleft 2022 Johannes Unger (just minor enhancements)
+ * Copyleft 2023 Johannes Unger (just minor enhancements)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ return true;
 }
 
 // non-DRY
-bool DivideAndConquer01::binarysearchChars(size_t &pivot, const char * const * const table, const char * const value, size_t upperBound, const size_t max_str_len) {
+bool DivideAndConquer01::binarysearchChars(size_t &pivot, const void * const * const table, const char * const value, size_t upperBound, const size_t &max_str_len) {
   //assert table != NULL && value != NULL
   size_t lowerBound = 0;
   pivot = upperBound / 2;

@@ -2,7 +2,7 @@
  *
  * This file is part of the Remoterelay Arduino sketch.
  * Copyleft 2017 Nicolas Agius <nicolas.agius@lps-it.fr>
- * Copyleft 2022 Johannes Unger (just minor enhancements)
+ * Copyleft 2023 Johannes Unger (just minor enhancements)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ static const char CT_JSON[] = "application/json";
 static const char CT_TEXT[] = "text/plain";
 
 // define enum stringlist https://stackoverflow.com/a/10966395
-#define FOREACH_FRUIT(FRUIT)      \
+#define FOREACH_FRUIT1(FRUIT)      \
         FRUIT(debug)              \
         FRUIT(login)              \
         FRUIT(password)           \
@@ -46,7 +46,7 @@ static const char CT_TEXT[] = "text/plain";
 #define GENERATE_ENUM(ENUM) WEB_PARAM_##ENUM,
 
 enum ENUM_WEB_PARAM {
-    FOREACH_FRUIT(GENERATE_ENUM)
+    FOREACH_FRUIT1(GENERATE_ENUM)
 };
 
 #undef GENERATE_ENUM
@@ -54,11 +54,11 @@ enum ENUM_WEB_PARAM {
 
 // pucgenie: Is the overhead relevant?
 static const String WEB_PARAM[] = {
-    FOREACH_FRUIT(GENERATE_STRING)
+    FOREACH_FRUIT1(GENERATE_STRING)
 };
 
 #undef GENERATE_STRING
-#undef FOREACH_FRUIT
+#undef FOREACH_FRUIT1
 
 bool isAuthBasicOK() {
   // Disable auth if not credential provided
@@ -124,13 +124,13 @@ return;
 
   // Parse args   
   for (uint8_t i = wifiManager.server->args(); i --> 0; ) {
-    String param = wifiManager.server->argName(i);
-    size_t idxOut;
+    const String param = wifiManager.server->argName(i);
+    ENUM_WEB_PARAM idxOut;
     if (!DivideAndConquer01::binarysearchString(idxOut, WEB_PARAM, param, sizeof(WEB_PARAM))) {
       wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
 return;
     }
-    switch () {
+    switch (idxOut) {
       default: {
         wifiManager.server->send(400, CT_TEXT, "Unimplemented parameter: " + param + "\r\n");
 return;
@@ -226,7 +226,7 @@ return;
  * Args :
  *   - mode = "<on|off>"
  */
-void handlePUTChannel(uint8_t channel) {
+void handlePUTChannel(const uint8_t channel) {
   // TODO: pucgenie: Can't server handle this check itself?
   if (!isAuthBasicOK()) {
 return;
@@ -239,16 +239,19 @@ return;
 return;
   }
 
-  int8_t requestedMode = MODE_OFF; // Default in case of error
+  int8_t requestedMode;
   String value = wifiManager.server->arg(0);
   if (value.equalsIgnoreCase("on")) {
     requestedMode = MODE_ON;
   } else if (value.equalsIgnoreCase("off")) {
     requestedMode = MODE_OFF;
   } else {
+    // pucgenie: Could have used a format string instead, but look how much pre-parsing and pre-compiling I did manually. xP
     String msg = "{'invalid': ";
+    static const char msgTail[] = ", 'expected': ['on', 'off']}";
+    msg.reserve(msg.length() + value.length() + sizeof(msgTail));
     msg.concat(value);
-    msg.concat("}");
+    msg.concat(msgTail);
     wifiManager.server->send(400, CT_JSON, msg);
 return;
   } 
@@ -265,7 +268,7 @@ return;
 /**
  * GET /channel/:id
  */
-void handleGETChannel(uint8_t channel) {
+void handleGETChannel(const uint8_t channel) {
   if (!isAuthBasicOK()) {
 return;
   }
@@ -288,6 +291,7 @@ void setup_web_handlers(size_t channel_count) {
   char _channelPath[] = "/channel/#";
   do {
     _channelPath[sizeof(_channelPath) / sizeof(_channelPath[0]) - 2] = '0' + channel_count;
+    // TODO: Check if the library copies the string
     wifiManager.server->on(_channelPath, HTTP_PUT, std::bind(&handlePUTChannel, channel_count));
     wifiManager.server->on(_channelPath, HTTP_GET, std::bind(&handleGETChannel, channel_count));
   } while (channel_count-- != 0);

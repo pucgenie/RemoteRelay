@@ -25,18 +25,24 @@
 #include <Arduino.h>
 #include "Logger.h"
 
+// define enum stringlist https://stackoverflow.com/a/10966395
+#define MyATCommand_gen(FRUIT)      \
+        FRUIT(RESTORE)              \
+        FRUIT(RST)              \
+        FRUIT(CWMODE_1)           \
+        FRUIT(CWMODE_2)             \
+        FRUIT(CWSTARTSMART)               \
+        FRUIT(CWSMARTSTART_1)         \
+        FRUIT(CIPMUX_1) \
+        FRUIT(CIPSERVER)            \
+        FRUIT(CIPSTO)            \
+
+#define GENERATE_ENUM(ENUM) ##ENUM,
 enum MyATCommand {
-  AT_RESTORE,
-  AT_RST,
-  AT_CWMODE_1,
-  AT_CWMODE_2,
-  AT_CWSTARTSMART,
-  AT_CWSMARTSTART_1,
-  AT_CIPMUX_1,
-  AT_CIPSERVER,
-  AT_CIPSTO,
-  INVALID_EXPECTED_AT
+    MyATCommand_gen(GENERATE_ENUM)
+    INVALID_EXPECTED_AT,
 };
+#undef GENERATE_ENUM
 
 // TODO: pucgenie: Handle the exact commands.
 class ATReplies {

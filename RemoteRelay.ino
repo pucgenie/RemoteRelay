@@ -2,7 +2,7 @@
  *
  * This file is part of the Remoterelay Arduino sketch.
  * Copyleft 2018 Nicolas Agius <nicolas.agius@lps-it.fr>
- * Copyleft 2022 Johannes Unger (just minor enhancements)
+ * Copyleft 2023 Johannes Unger (just minor enhancements)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,7 +52,9 @@ Seldomly used strings (subjective measurement) are always PSTR.
 **/
 
 // To control global EEPROM access (begin etc.)
+//#define NO_GLOBAL_EEPROM
 #include "EEPROM.h"
+//EEPROMClass EEPROM;
 
 // To detect Internet presence, more or less.
 #include <AsyncPing.h>
@@ -70,10 +72,10 @@ char buffer[2][BUF_SIZE];
 
 RemoteRelaySettings settings;
 Logger logger;
-bool shouldSaveConfig = false;
+bool shouldSaveConfig   = false;
 MyLoopState myLoopState = AFTER_SETUP;
 MyWiFiState myWiFiState = MYWIFI_OFF;
-MyWebState myWebState = WEB_DISABLED;
+MyWebState myWebState   = WEB_DISABLED;
 MyPingState myPingState = PING_NONE;
 /**
  * WiFiManagerParameters can't be removed so deleting the whole object is necessary.
@@ -86,11 +88,15 @@ new(&wifiManager) WiFiManager();
 WiFiManager wifiManager;
 static AsyncPing ping;
 static const __FlashStringHelper *serial_response_next = NULL;
-// TODO: should be configurable
-static IPAddress isp_endpoint(8,8,8,8);
+// TODO: should be configurable, or ping 3 different ones and ignore if 1 of them is unreachable
+static IPAddress isp_endpoints[] = {
+  IPAddress(8,8,8,8),
+  IPAddress(1,1,1,1),
+};
+// Alternative: Query 2 NTP servers and compare time
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
-static ATReplies atreplies = ATReplies();
+static ATReplies atreplies;
 #endif
 
 static RSTM32Mode channels[] = {
@@ -120,7 +126,7 @@ struct RSTM32Payload {
   uint8_t checksum :8;
 };
 
-void setChannel(uint8_t channel, RSTM32Mode mode) {
+void setChannel(const uint8_t channel, const RSTM32Mode mode) {
   struct RSTM32Payload payload = {
     .channel = channel,
     .mode = mode,
@@ -149,9 +155,9 @@ void setChannel(uint8_t channel, RSTM32Mode mode) {
   }
 }
 
-size_t getJSONSettings(char *p_buffer, size_t bufSize) {
+size_t getJSONSettings(char * const p_buffer, const size_t bufSize) {
   //Generate JSON 
-  size_t snstatus = snprintf_P(p_buffer, bufSize, LOWMEMORY_STR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
+  const size_t snstatus = snprintf_P(p_buffer, bufSize, LOWMEMORY_STR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
 )=="==")
     , settings.login
     , bool2str(settings.flags.debug)
@@ -163,9 +169,9 @@ size_t getJSONSettings(char *p_buffer, size_t bufSize) {
   return snstatus;
 }
 
-size_t getJSONState(uint8_t channel, char *p_buffer, size_t bufSize) {
+size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t &bufSize) {
   //Generate JSON 
-  size_t snstatus = ULTRALOWMEMORY_FUNC(p_buffer, bufSize, ULTRALOWMEMORY_STR(R"=="==({"channel":%.1i,"mode":"%.3s"}
+  const size_t snstatus = ULTRALOWMEMORY_FUNC(p_buffer, bufSize, ULTRALOWMEMORY_STR(R"=="==({"channel":%.1i,"mode":"%.3s"}
 )=="==")
     , channel
     , (channels[channel - 1] == MODE_ON) ? "on" : "off"
@@ -177,29 +183,6 @@ size_t getJSONState(uint8_t channel, char *p_buffer, size_t bufSize) {
 //void configModeCallback(WiFiManager *myWiFiManager) {
 //  
 //}
-
-/**
- * 
-**/
-void configureWebParams() {
-  // mind static keyword - effective global.
-  static WiFiManagerParameter webparams[] = {
-    WiFiManagerParameter("login",      "HTTP Login",      settings.login, AUTHBASIC_LEN_USERNAME),
-    WiFiManagerParameter("password",   "HTTP Password",   settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/),
-    WiFiManagerParameter("ssid",       "AP mode SSID",    settings.ssid, LENGTH_SSID),
-    WiFiManagerParameter("wpa_key",    "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY),
-    WiFiManagerParameter("webservice", "Webservice", bool2str(settings.flags.webservice), 5, "placeholder=\"webservice\" type=\"checkbox\""),
-    WiFiManagerParameter("wifimanager_portal", "WiFiManager Portal in STA mode", bool2str(settings.flags.wifimanager_portal), 5, "placeholder=\"wifimanager_portal\" type=\"checkbox\""),
-  };
-#ifdef WIFIMANAGER_HAS_SETPARAMETERS
-  // WiFiManager v2.0.9 is built around an array with POINTERS (WiFiManagerParameter*[])... Wouldn't work without changing a few things.
-  wifiManager.setParameters(&webparams);
-#else
-  for (WiFiManagerParameter &x : webparams) {
-    wifiManager.addParameter(&x);
-  }
-#endif
-}
 
 void setup()  {
   Serial.begin(115200);
@@ -229,7 +212,26 @@ void setup()  {
   }
 
   // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
-  configureWebParams();
+  {
+    // mind static keyword - effective globally.
+    static WiFiManagerParameter webparams[] = {
+      WiFiManagerParameter("login",      "HTTP Login",      settings.login, AUTHBASIC_LEN_USERNAME),
+      WiFiManagerParameter("password",   "HTTP Password",   settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/),
+      WiFiManagerParameter("ssid",       "AP mode SSID",    settings.ssid, LENGTH_SSID),
+      WiFiManagerParameter("wpa_key",    "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY),
+      WiFiManagerParameter("webservice", "Webservice", bool2str(settings.flags.webservice), 5, "placeholder=\"webservice\" type=\"checkbox\""),
+      WiFiManagerParameter("wifimanager_portal", "WiFiManager Portal in STA mode", bool2str(settings.flags.wifimanager_portal), 5, "placeholder=\"wifimanager_portal\" type=\"checkbox\""),
+      //WiFiManagerParameter("ping_ip1",    "IPv4 to ping", settings.ping_addr[0], 15),
+    };
+  #ifdef WIFIMANAGER_HAS_SETPARAMETERS
+    // WiFiManager v2.0.9 is built around an array with POINTERS (WiFiManagerParameter*[])... Wouldn't work without changing a few things.
+    wifiManager.setParameters(&webparams);
+  #else
+    for (WiFiManagerParameter &x : webparams) {
+      wifiManager.addParameter(&x);
+    }
+  #endif
+  }
   wifiManager.setSaveConfigCallback([](){
     shouldSaveConfig = true;
   });

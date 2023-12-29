@@ -113,7 +113,7 @@ enum RSTM32Mode {
   R_CLOSE = 1,
 };
 
-void setChannel(uint8_t channel, RSTM32Mode mode);
+void setChannel(const uint8_t channel, const RSTM32Mode mode);
 //void saveSettings(RemoteRelaySettings &p_settings, uint16_t &p_settings_offset);
 void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.
@@ -122,10 +122,10 @@ void eeprom_destroy_crc(uint16_t &old_addr);
 /**
  * @returns count of chars written (without terminator)
 **/
-size_t getJSONSettings(char *buffer, size_t bufSize);
+size_t getJSONSettings(char * const buffer, const size_t bufSize);
 /**
  * @returns count of chars written (without terminator)
 **/
-size_t getJSONState(uint8_t channel, char *p_buffer, size_t bufSize);
+size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t bufSize);
 
 #endif  // REMOTERELAY_H

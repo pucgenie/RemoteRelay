@@ -90,7 +90,7 @@ class RemoteRelaySettings {
     /**
     * write a zero anywhere in CRC to force loading default settings at boot
     */
-    static void eeprom_destroy_crc(uint16_t old_addr);
+    static void eeprom_destroy_crc(const uint16_t &old_addr);
     /**
      * CRC16 simple calculation
      * Based on CRC8 https://github.com/PaulStoffregen/OneWire/blob/master/OneWire.cpp

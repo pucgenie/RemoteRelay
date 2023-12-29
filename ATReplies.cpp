@@ -96,17 +96,21 @@ return INVALID_EXPECTED_AT;
     logger.debug(F("{'error': 'unexpected input', 'rawdata': '%s'}"), stringIn);
 return INVALID_EXPECTED_AT;
   }
-  
-  static const char* COMMAND_STRINGS[] = {
-    "A",
-    "B",
-    "C",
-  };
-  size_t ret = DivideAndConquer01::binarysearchString(COMMAND_STRINGS, stringIn.substring(3), sizeof(COMMAND_STRINGS));
-  if (ret >= 0) {
-return (MyATCommand) ret;
-  }
 
+  #define GENERATE_STRING(STRING) #STRING,
+  const String COMMAND_STRINGS[] = {
+    MyATCommand_gen(GENERATE_STRING)
+  };
+  #undef GENERATE_STRING
+  
+  MyATCommand ret = INVALID_EXPECTED_AT;
+  String partToSearch = stringIn.substring(3);
+  // FIXME: split at next plus-sign
+  if (DivideAndConquer01::binarysearchString(ret, COMMAND_STRINGS, partToSearch, sizeof(COMMAND_STRINGS))) {
+return ret;
+  } else {
+return INVALID_EXPECTED_AT;
+  }
 }
 
 inline void ATReplies::answer_ok(Logger &logger) {

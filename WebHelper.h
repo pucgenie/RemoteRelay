@@ -2,7 +2,7 @@
  *
  * This file is part of the Remoterelay Arduino sketch.
  * Copyleft 2017 Nicolas Agius <nicolas.agius@lps-it.fr>
- * Copyleft 2022 Johannes Unger (just minor enhancements)
+ * Copyleft 2023 Johannes Unger (just minor enhancements)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

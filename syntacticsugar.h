@@ -20,7 +20,9 @@
 #ifndef SYNTACTICSUGAR_H
 #define SYNTACTICSUGAR_H
 
+// please don't ULTRALOWMEM here xD
 #define bool2str(x) x ? "true" : "false"
+
 #define charnonempty(x) x[0] != '\0'
 
 /**

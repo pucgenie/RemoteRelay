@@ -33,9 +33,9 @@ extern "C" {
 #include "Logger.h"
 
 // object size plus crc8
-#define SETTINGS_FALSH_SIZE sizeof(RemoteRelaySettings)+1
-#define SETTINGS_FALSH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FALSH_SIZE)
-#define SETTINGS_FALSH_WEARLEVEL_MARK_BITS GET_BIT_FIELD_WIDTH(ST_SETTINGS_FLAGS, wearlevel_mark)
+#define SETTINGS_FLASH_SIZE sizeof(RemoteRelaySettings)+1
+#define SETTINGS_FLASH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FLASH_SIZE)
+#define SETTINGS_FLASH_WEARLEVEL_MARK_BITS GET_BIT_FIELD_WIDTH(ST_SETTINGS_FLAGS, wearlevel_mark)
 
 /**
  * Reads settings from EEPROM flash into this object.
@@ -45,17 +45,17 @@ extern "C" {
  */
 bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
   bool ret;
-  while (ret = (the_address < (SETTINGS_FALSH_OVERADDR))) {
+  while (ret = (the_address < (SETTINGS_FLASH_OVERADDR))) {
     EEPROM.get(the_address, *this);
     // check if marked as deleted and how many bits are set 0
     const int x = this->flags.wearlevel_mark;
-    if (x < ((1<<SETTINGS_FALSH_WEARLEVEL_MARK_BITS) - 1)) {
+    if (x < ((1<<SETTINGS_FLASH_WEARLEVEL_MARK_BITS) - 1)) {
       #pragma clang loop unroll(full)
       //#pragma GCC unroll 8
-      for (int nb = SETTINGS_FALSH_WEARLEVEL_MARK_BITS; nb --> 0; ) {
+      for (int nb = SETTINGS_FLASH_WEARLEVEL_MARK_BITS; nb --> 0; ) {
         // some way to spare one instruction?^^
         if ((x & (1<<nb)) == 0) {
-          the_address += SETTINGS_FALSH_SIZE;
+          the_address += SETTINGS_FLASH_SIZE;
         }
       }
     } else if (crc8((uint8_t*) this, sizeof(RemoteRelaySettings)) == uint8_t(EEPROM.read(the_address + sizeof(RemoteRelaySettings)))) {
@@ -63,7 +63,7 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
       EEPROM.get(the_address, *this);
   break;
     } else {
-      the_address += SETTINGS_FALSH_SIZE;
+      the_address += SETTINGS_FLASH_SIZE;
     }
   }
   if (!ret) {
@@ -106,8 +106,8 @@ void RemoteRelaySettings::saveSettings(uint16_t &p_settings_offset) {
   }
   #endif
   uint8_t theCRC = crc8((uint8_t*) this, sizeof(RemoteRelaySettings));
-  p_settings_offset += SETTINGS_FALSH_SIZE;
-  if (p_settings_offset >= (SETTINGS_FALSH_OVERADDR - SETTINGS_FALSH_SIZE)) {
+  p_settings_offset += SETTINGS_FLASH_SIZE;
+  if (p_settings_offset >= (SETTINGS_FLASH_OVERADDR - SETTINGS_FLASH_SIZE)) {
     this->flags.erase_cycles += 1;
     // check wrap-around / overflow
     if (this->flags.erase_cycles == 0) {
@@ -121,22 +121,22 @@ void RemoteRelaySettings::saveSettings(uint16_t &p_settings_offset) {
   EEPROM.commit();
 }
 
-#undef SETTINGS_FALSH_OVERADDR
-#undef SETTINGS_FALSH_SIZE
-#undef SETTINGS_FALSH_WEARLEVEL_MARK_BITS
+#undef SETTINGS_FLASH_OVERADDR
+#undef SETTINGS_FLASH_SIZE
+#undef SETTINGS_FLASH_WEARLEVEL_MARK_BITS
 
 uint8_t RemoteRelaySettings::crc8(const uint8_t *addr, size_t len) {
   uint8_t crc = 0;
 
   while (len--) {
-    uint8_t inbyte = *addr++;
+    uint8_t inbyte = *(addr++);
     #pragma clang loop unroll(full)
     #pragma GCC unroll 8
     for (uint8_t i = 8; i --> 0;) {
       uint8_t mix = (crc ^ inbyte) & 0x01;
       crc >>= 1;
       if (mix) {
-        crc ^= 0x8C;
+        crc ^= 0b10001100;
       }
       inbyte >>= 1;
     }
@@ -144,7 +144,7 @@ uint8_t RemoteRelaySettings::crc8(const uint8_t *addr, size_t len) {
   return crc;
 }
 #ifdef EEPROM_SPI_NOR_REPROGRAM
-void RemoteRelaySettings::eeprom_destroy_crc(uint16_t old_addr) {
+void RemoteRelaySettings::eeprom_destroy_crc(const uint16_t &old_addr) {
   RemoteRelaySettings tmp_settings();
   if (!tmp_settings.loadSettings(old_addr)) {
     // it already is incorrect - nop.
@@ -156,7 +156,6 @@ return;
     if (crc == 0) {
       // what a coincidence
       bool found = false;
-      char *ptr = tmp_settings.login;
       if (offsetof(RemoteRelaySettings, password) < offsetof(RemoteRelaySettings, login)) {
         // FIXME: need a define for char[] capacities in RemoteRelaySettings...
         while (true) {
@@ -171,13 +170,14 @@ return;
         sizeof(((RemoteRelaySettings *)0)->wpa_key)
       };
       bool string_terminator_found;
-      byte owf_i = sizeof(OVERWRITABLE_BYTES);
-      while ((!found) && (owf_i --> 0)) {
+      byte overwritable_field_index = sizeof(OVERWRITABLE_BYTES);
+      char *ptr = tmp_settings.login;
+      while ((!found) && (overwritable_field_index --> 0)) {
         string_terminator_found = false;
         // pucgenie: I wonder whether or not the compiler sees
-        #pragma clang loop unroll(full)
-        //#pragma GCC unroll 255
-        for (int i = OVERWRITABLE_BYTES[owf_i]; i --> 0; ++ptr) {
+        //#pragma clang loop unroll_count(16)
+        //#pragma GCC unroll 16
+        for (int i = OVERWRITABLE_BYTES[overwritable_field_index]; i --> 0; ++ptr) {
           if ((*ptr) == 0) {
             string_terminator_found = true;
           } else if (string_terminator_found) {
@@ -190,8 +190,8 @@ return;
       }
       // don't touch RemoteRelaySettings.flags.erase_cycles
       if (!found) {
-         // FIXME: erase
-         while (true) {
+        // FIXME: erase
+        while (true) {
           led_scream(0b11101110);
         }
       }
