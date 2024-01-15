@@ -57,16 +57,19 @@ void Logger::info(const __FlashStringHelper *fmt, ...) {
 }
 
 
-void Logger::logNow(const char* p_buffer) {
+void Logger::logNow(const char* const p_buffer) {
   // Add timestamp header
   uint32_t uptime = millis();
   // pucgenie: don't use F() here.
-  // Standard compilers recognize DIV and modulo and optimize if supported by hardware.
-  snprintf(ringlog[index], BUF_LEN, "[%04d.%03d] ", uptime / 1000, uptime % 1000);
-  strncpy(ringlog[index] + 11, p_buffer, BUF_LEN - 11);
+  #define LOG_MILLIS_FORMAT "[%07d] "
+  char * const ringlogline = ringlog[index];
+  // pucgenie: I don't like \0
+  snprintf(ringlogline, sizeof LOG_MILLIS_FORMAT, LOG_MILLIS_FORMAT, uptime);
+  strncpy(ringlogline + (sizeof LOG_MILLIS_FORMAT - 1), p_buffer, BUF_LEN - (sizeof LOG_MILLIS_FORMAT - 1));
+  #undef  LOG_MILLIS_FORMAT
   
   if (enableSerial) {
-    Serial.println(ringlog[index]);
+    Serial.println(ringlogline);
   }
   
   // Loop over at the begining of the ring
@@ -79,7 +82,7 @@ void Logger::log(const __FlashStringHelper *fmt, va_list ap) {
   // just keep it allocated
   static char buffer[BUF_LEN];
   // Generate log message (does not support float)
-  // TODO: Handle return code.
+  // FIXME: Handle return code. Loop for continuation.
   vsnprintf_P(buffer, BUF_LEN, reinterpret_cast<PGM_P>(fmt), ap);
   logNow(buffer);
 }
@@ -88,7 +91,7 @@ void Logger::getLog(String &msg) {
   // Get uptime
   char uptime[9];
   // pucgenie: microoptimization: Don't use F() here.
-  // TODO: Handle return code.
+  // TODO: Handle return code better.
   if (snprintf(uptime, sizeof(uptime), "%08d", millis() / 1000) >= sizeof(uptime)) {
     // can't use logger...
     Serial.println(F("Time formatting broken. Continuing anyway..."));

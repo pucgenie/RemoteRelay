@@ -22,6 +22,28 @@
 #ifndef REMOTERELAY_H
 #define REMOTERELAY_H
 
+/**
+If enabled, also remove often used strings from RAM.
+**/
+#if 0
+#define ULTRALOWMEMORY_FUNC snprintf_P
+#define ULTRALOWMEMORY_STR PSTR
+#else
+#define ULTRALOWMEMORY_FUNC snprintf
+#define ULTRALOWMEMORY_STR
+#endif
+
+/**
+If enabled, remove not-that-often-used strings from RAM.
+**/
+#if 1
+#define LOWMEMORY_FUNC snprintf_P
+#define LOWMEMORY_STR PSTR
+#else
+#define LOWMEMORY_FUNC snprintf
+#define LOWMEMORY_STR
+#endif
+
 #include "Logger.h"
 #include "RemoteRelaySettings.h"
 
@@ -43,10 +65,6 @@
 #ifndef DISABLE_NUVOTON_AT_REPLIES
 #include "ATReplies.h"
 #endif
-
-
-#define MODE_ON 1               // See LC-Relay board datasheet for open/close values
-#define MODE_OFF 0
 
 enum MyLoopState {
   // it means something like READY
@@ -108,9 +126,10 @@ extern MyWebState myWebState;
 extern MyPingState myPingState;
 extern WiFiManager wifiManager;
 
+// See LC-Relay board datasheet for open/close values
 enum RSTM32Mode {
-  R_OPEN  = 0,
-  R_CLOSE = 1,
+  R_OPEN  = 0, // OFF
+  R_CLOSE = 1, // ON
 };
 
 void setChannel(const uint8_t channel, const RSTM32Mode mode);
@@ -119,10 +138,6 @@ void eeprom_destroy_crc(uint16_t &old_addr);
 // Doesn't need to be visible yet.
 //bool loadSettings(RemoteRelaySettings &p_settings, uint16_t &out_address);
 //void setDefaultSettings(RemoteRelaySettings& p_settings);
-/**
- * @returns count of chars written (without terminator)
-**/
-size_t getJSONSettings(char * const buffer, const size_t bufSize);
 /**
  * @returns count of chars written (without terminator)
 **/

@@ -98,7 +98,7 @@ return;
   }
   // stack, no fragmentation
   char buffer[BUF_SIZE];
-  if (getJSONSettings(buffer, BUF_SIZE) > BUF_SIZE) {
+  if (settings.getJSONSettings(buffer, BUF_SIZE) > BUF_SIZE) {
     // TODO: tell that something broke
   }
   wifiManager.server->send(200, CT_JSON, String(buffer));
@@ -125,12 +125,12 @@ return;
   // Parse args   
   for (uint8_t i = wifiManager.server->args(); i --> 0; ) {
     const String param = wifiManager.server->argName(i);
-    ENUM_WEB_PARAM idxOut;
+    size_t idxOut;
     if (!DivideAndConquer01::binarysearchString(idxOut, WEB_PARAM, param, sizeof(WEB_PARAM))) {
       wifiManager.server->send(400, CT_TEXT, "Unknown parameter: " + param + "\r\n");
 return;
     }
-    switch (idxOut) {
+    switch ((ENUM_WEB_PARAM) idxOut) {
       default: {
         wifiManager.server->send(400, CT_TEXT, "Unimplemented parameter: " + param + "\r\n");
 return;
@@ -193,7 +193,7 @@ return;
   // Reply with current settings
   // stack, no fragmentation
   char buffer[BUF_SIZE];
-  if (getJSONSettings(buffer, BUF_SIZE) > BUF_SIZE) {
+  if (settings.getJSONSettings(buffer, BUF_SIZE) > BUF_SIZE) {
     // TODO: tell that something broke
   }
   wifiManager.server->send(201, CT_JSON, String(buffer));
@@ -239,17 +239,19 @@ return;
 return;
   }
 
-  int8_t requestedMode;
-  String value = wifiManager.server->arg(0);
+  RSTM32MODE requestedMode;
+  const String value = wifiManager.server->arg(0);
   if (value.equalsIgnoreCase("on")) {
-    requestedMode = MODE_ON;
+    requestedMode = R_CLOSE;
   } else if (value.equalsIgnoreCase("off")) {
-    requestedMode = MODE_OFF;
+    requestedMode = R_OPEN;
   } else {
     // pucgenie: Could have used a format string instead, but look how much pre-parsing and pre-compiling I did manually. xP
-    String msg = "{'invalid': ";
-    static const char msgTail[] = ", 'expected': ['on', 'off']}";
-    msg.reserve(msg.length() + value.length() + sizeof(msgTail));
+    String msg(); //RAII
+    /*static (... just put it on the stack using array-initializer) */ const char msgTail[] = ", 'expected': ['on', 'off']}";
+    const char msgHead[] = "{'invalid': ";
+    msg.reserve(sizeof(msgHead) + value.length() + sizeof(msgTail));
+    msg.concat(msgHead);
     msg.concat(value);
     msg.concat(msgTail);
     wifiManager.server->send(400, CT_JSON, msg);

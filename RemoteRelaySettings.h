@@ -100,6 +100,10 @@ class RemoteRelaySettings {
     **/
     #endif
     static uint8_t crc8(const uint8_t *addr, size_t len);
+    /**
+    * @returns count of chars written (without terminator)
+    **/
+    size_t getJSONSettings(char * const buffer, const size_t bufSize);
   
   private:
   

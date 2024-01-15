@@ -24,7 +24,7 @@
 
 class DivideAndConquer01 {
     public:
-        bool binarysearchString(size_t &pivot, const String * const table, const String &value, size_t upperBound);
-        bool binarysearchChars(size_t &pivot, const char * const * const table, const char * const value, size_t upperBound, const size_t &max_str_len);
+        static bool binarysearchString(size_t &pivot, const String * const sortedList, const String &value, size_t upperBound);
+        static bool binarysearchChars(size_t &pivot, const char * const * const sortedList, const char * const value, size_t upperBound, const size_t &max_str_len);
 };
 #endif  // DIVIDEANDCONQUER01_H

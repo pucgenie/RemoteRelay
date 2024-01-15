@@ -25,27 +25,8 @@
 // board manager: "Generic ESP8266 Board" https://randomnerdtutorials.com/how-to-install-esp8266-board-arduino-ide/
 // preferences additional: https://dl.espressif.com/dl/package_esp32_index.json, http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-/**
-If enabled, also remove often used strings from RAM.
-**/
-#if 0
-#define ULTRALOWMEMORY_FUNC snprintf_P
-#define ULTRALOWMEMORY_STR PSTR
-#else
-#define ULTRALOWMEMORY_FUNC snprintf
-#define ULTRALOWMEMORY_STR
-#endif
-
-/**
-If enabled, remove not-that-often-used strings from RAM.
-**/
-#if 1
-#define LOWMEMORY_FUNC snprintf_P
-#define LOWMEMORY_STR PSTR
-#else
-#define LOWMEMORY_FUNC snprintf
-#define LOWMEMORY_STR
-#endif
+// turn off unneeded functionality
+#define NO_GLOBAL_SERIAL1
 
 /**
 Seldomly used strings (subjective measurement) are always PSTR.
@@ -96,15 +77,15 @@ static IPAddress isp_endpoints[] = {
 // Alternative: Query 2 NTP servers and compare time
 
 #ifndef DISABLE_NUVOTON_AT_REPLIES
-static ATReplies atreplies;
+static at_replies::ATReplies atreplies;
 #endif
 
 static RSTM32Mode channels[] = {
-    MODE_OFF
-  , MODE_OFF
+  R_OPEN,
+  R_OPEN,
 #ifdef FOUR_WAY_MODE
-  , MODE_OFF
-  , MODE_OFF
+  R_OPEN,
+  R_OPEN,
 #endif
 };
 
@@ -135,38 +116,28 @@ void setChannel(const uint8_t channel, const RSTM32Mode mode) {
   // Compute checksum
   payload.checksum = payload.header + payload.channel + ((int) payload.mode);
   
-  static_assert(sizeof(channels) <= 9, "print functions are restricted to one-digit channel count");
+  //assert(sizeof(channels) <= 9, "print functions are restricted to one-digit channel count");
   // Save status 
   channels[channel - 1] = mode;
   
-  logger.info(F("{'channel': %c, 'state': '%.3s'}"), channel + '0', (mode == MODE_ON) ? "on" : "off");
-  // don't want to care about endianness
-  logger.debug(F("{'payload': '%02X%02X%02X%02X'}"), payload[0], payload[1], payload[2], payload[3]);
+  logger.info(F("{'channel': %c, 'state': '%.3s'}"), channel + '0', (mode == R_CLOSE) ? "on" : "off");
+  {
+    const uint8_t *payload_bytes = (const uint8_t *) &payload;
+    // TODO: Is it little-endian or big-endian ...
+    logger.debug(F("{'payload': '%02X%02X%02X%02X'}"), payload_bytes[0], payload_bytes[1], payload_bytes[2], payload_bytes[3]);
   
-  // Give some time to the watchdog
-  ESP.wdtFeed();
-  yield();
-  
-  // Send payload
-  Serial.write((const uint8_t *) &payload, sizeof(payload));
+    // Give some time to the watchdog
+    ESP.wdtFeed();
+    yield();
+    
+    // Send payload
+    // TODO: Is it little-endian or big-endian ...
+    Serial.write(payload_bytes, sizeof(payload));
+  }
   
   if (settings.flags.serial) {
-    Serial.println(""); // Clear the line for log output
+    Serial.println(); // Clear the line for log output
   }
-}
-
-size_t getJSONSettings(char * const p_buffer, const size_t bufSize) {
-  //Generate JSON 
-  const size_t snstatus = snprintf_P(p_buffer, bufSize, LOWMEMORY_STR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
-)=="==")
-    , settings.login
-    , bool2str(settings.flags.debug)
-    , bool2str(settings.flags.serial)
-    , bool2str(settings.flags.webservice)
-    , bool2str(settings.flags.wifimanager_portal)
-  );
-  assert(snstatus > 0 && snstatus < bufSize);
-  return snstatus;
 }
 
 size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t &bufSize) {
@@ -174,7 +145,7 @@ size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t &
   const size_t snstatus = ULTRALOWMEMORY_FUNC(p_buffer, bufSize, ULTRALOWMEMORY_STR(R"=="==({"channel":%.1i,"mode":"%.3s"}
 )=="==")
     , channel
-    , (channels[channel - 1] == MODE_ON) ? "on" : "off"
+    , (channels[channel - 1] == R_CLOSE) ? "on" : "off"
   );
   assert(snstatus > 0 && snstatus < bufSize);
   return snstatus;
@@ -213,21 +184,20 @@ void setup()  {
 
   // don't think about freeing these resources if not using them - we would need to implement a good reset mechanism...
   {
-    // mind static keyword - effective globally.
-    static WiFiManagerParameter webparams[] = {
+    const WiFiManagerParameter webparams[] = {
       WiFiManagerParameter("login",      "HTTP Login",      settings.login, AUTHBASIC_LEN_USERNAME),
       WiFiManagerParameter("password",   "HTTP Password",   settings.password, AUTHBASIC_LEN_PASSWORD/*, "type='password'"*/),
       WiFiManagerParameter("ssid",       "AP mode SSID",    settings.ssid, LENGTH_SSID),
       WiFiManagerParameter("wpa_key",    "AP mode WPA key", settings.wpa_key, LENGTH_WPA_KEY),
       WiFiManagerParameter("webservice", "Webservice", bool2str(settings.flags.webservice), 5, "placeholder=\"webservice\" type=\"checkbox\""),
       WiFiManagerParameter("wifimanager_portal", "WiFiManager Portal in STA mode", bool2str(settings.flags.wifimanager_portal), 5, "placeholder=\"wifimanager_portal\" type=\"checkbox\""),
-      //WiFiManagerParameter("ping_ip1",    "IPv4 to ping", settings.ping_addr[0], 15),
+      //WiFiManagerParameter("ping_ip1",    "IPv4 to ping", settings.ping_addr[0], 16),
     };
   #ifdef WIFIMANAGER_HAS_SETPARAMETERS
     // WiFiManager v2.0.9 is built around an array with POINTERS (WiFiManagerParameter*[])... Wouldn't work without changing a few things.
     wifiManager.setParameters(&webparams);
   #else
-    for (WiFiManagerParameter &x : webparams) {
+    for (WiFiManagerParameter x : webparams) {
       wifiManager.addParameter(&x);
     }
   #endif
@@ -422,23 +392,23 @@ void loop() {
   }
   if (myLoopState == AFTER_SETUP) {
     // don't accept serial commands if some action is queued. We have enought time to react at next loop iteration.
-    static MyATCommand at_previous = INVALID_EXPECTED_AT, at_current;
+    static at_replies::MyATCommand at_previous = INVALID_EXPECTED_AT, at_current;
     // pretend to be an AT device here
     if (Serial.available()) {
       switch (at_current = atreplies.handle_nuvoTon_comms(logger)) {
-        case AT_RESTORE: {
+        case RESTORE: {
           myLoopState = RESTORE;
           //serial_response_next = F("OK");
         }
         break;
-        case AT_RST: {
+        case RST: {
           myLoopState = RESET;
             // pretend we reset (wait a bit then send the WiFi connected message)
             delay(10);
             Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
         }
         break;
-        case AT_CWMODE_1: {
+        case CWMODE_1: {
           if (at_previous != AT_CWMODE_1) {
             if (myWiFiState == STA_MODE) {
               logger.logNow("{'myWiFiMode': 'unexpected state'}");
@@ -447,29 +417,29 @@ void loop() {
           }
         }
         break;
-        case AT_CWMODE_2: {
+        case CWMODE_2: {
           if (at_previous != AT_CWMODE_2) {
             myWiFiState = AP_REQUESTED;
           }
         }
         break;
-        case AT_CWSTARTSMART: {
+        case CWSTARTSMART: {
           
         }
         break;
-        case AT_CWSMARTSTART_1: {
+        case CWSMARTSTART_1: {
           
         }
         break;
-        case AT_CIPMUX_1: {
+        case CIPMUX_1: {
           
         }
         break;
-        case AT_CIPSERVER: {
+        case CIPSERVER: {
           myWebState = WEB_REQUESTED;
         }
         break;
-        case AT_CIPSTO: {
+        case CIPSTO: {
           
         }
         break;
@@ -490,4 +460,10 @@ void loop() {
     }
   }
 #endif
+}
+
+
+void serialEvent() {
+
+
 }

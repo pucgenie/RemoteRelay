@@ -75,7 +75,7 @@
  * ...
  */
 
-
+namespace at_replies {
 
 MyATCommand ATReplies::handle_nuvoTon_comms(Logger &logger) {
   // Let's hope that communication doesn't get interrupted and that it doesn't take too long.
@@ -103,11 +103,12 @@ return INVALID_EXPECTED_AT;
   };
   #undef GENERATE_STRING
   
-  MyATCommand ret = INVALID_EXPECTED_AT;
-  String partToSearch = stringIn.substring(3);
+  size_t ret = INVALID_EXPECTED_AT;
+  const String partToSearch = stringIn.substring(3);
   // FIXME: split at next plus-sign
-  if (DivideAndConquer01::binarysearchString(ret, COMMAND_STRINGS, partToSearch, sizeof(COMMAND_STRINGS))) {
-return ret;
+  if (DivideAndConquer01::binarysearchString(ret, COMMAND_STRINGS, partToSearch, sizeof COMMAND_STRINGS)) {
+    // no need to bounds-check (provided that the string table for this enum is correct)
+return (MyATCommand) ret;
   } else {
 return INVALID_EXPECTED_AT;
   }
@@ -115,4 +116,6 @@ return INVALID_EXPECTED_AT;
 
 inline void ATReplies::answer_ok(Logger &logger) {
   Serial.println("OK");
+}
+
 }

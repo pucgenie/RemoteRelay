@@ -32,7 +32,7 @@ extern "C" {
 
 #include "Logger.h"
 
-// object size plus crc8
+// object size plus crc8. TODO: Check if already aligned to 256 Bytes (page size)
 #define SETTINGS_FLASH_SIZE sizeof(RemoteRelaySettings)+1
 #define SETTINGS_FLASH_OVERADDR FLASH_SECTOR_SIZE - (SETTINGS_FLASH_SIZE)
 #define SETTINGS_FLASH_WEARLEVEL_MARK_BITS GET_BIT_FIELD_WIDTH(ST_SETTINGS_FLAGS, wearlevel_mark)
@@ -92,7 +92,10 @@ bool RemoteRelaySettings::loadSettings(uint16_t &the_address) {
 
   // Display loaded setting on debug
   if (this->flags.debug) {
-    getJSONSettings(buffer, BUF_SIZE);
+    char buffer[BUF_SIZE];
+    if (this->getJSONSettings(buffer, BUF_SIZE)) {
+      
+    }
     logger.logNow(buffer);
   }
   return ret;
@@ -119,6 +122,20 @@ void RemoteRelaySettings::saveSettings(uint16_t &p_settings_offset) {
   EEPROM.put(p_settings_offset, *this);
   EEPROM.put(p_settings_offset + sizeof(RemoteRelaySettings), theCRC);
   EEPROM.commit();
+}
+
+size_t RemoteRelaySettings::getJSONSettings(char * const p_buffer, const size_t bufSize) {
+  //Generate JSON 
+  const size_t snstatus = snprintf_P(p_buffer, bufSize, LOWMEMORY_STR(R"=="==({"login":"%s","debug":%.5s,"serial":%.5s,"webservice":%.5s,"wifimanager_portal":%.5s}
+)=="==")
+    , this->login
+    , bool2str(this->flags.debug)
+    , bool2str(this->flags.serial)
+    , bool2str(this->flags.webservice)
+    , bool2str(this->flags.wifimanager_portal)
+  );
+  assert(snstatus > 0 && snstatus < bufSize);
+  return snstatus;
 }
 
 #undef SETTINGS_FLASH_OVERADDR

@@ -25,19 +25,22 @@
 #include <Arduino.h>
 #include "Logger.h"
 
+namespace at_replies {
+
 // define enum stringlist https://stackoverflow.com/a/10966395
+// needs to be sorted
 #define MyATCommand_gen(FRUIT)      \
-        FRUIT(RESTORE)              \
-        FRUIT(RST)              \
+        FRUIT(CIPMUX_1) \
+        FRUIT(CIPSERVER)            \
+        FRUIT(CIPSTO)            \
         FRUIT(CWMODE_1)           \
         FRUIT(CWMODE_2)             \
         FRUIT(CWSTARTSMART)               \
         FRUIT(CWSMARTSTART_1)         \
-        FRUIT(CIPMUX_1) \
-        FRUIT(CIPSERVER)            \
-        FRUIT(CIPSTO)            \
+        FRUIT(RESTORE)              \
+        FRUIT(RST)              \
 
-#define GENERATE_ENUM(ENUM) ##ENUM,
+#define GENERATE_ENUM(ENUM) ENUM,
 enum MyATCommand {
     MyATCommand_gen(GENERATE_ENUM)
     INVALID_EXPECTED_AT,
@@ -55,5 +58,7 @@ class ATReplies {
     static void answer_ok(Logger &logger);
     
 };
+
+}
 
 #endif  // ATREPLIES_H
