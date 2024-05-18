@@ -103,8 +103,8 @@ void Logger::getLog(String &msg) {
     Serial.println(F("Couldn't reserve String buffer. Continuing anyway..."));
   }
   // Generate header
-  msg += " ==== DEBUG LOG ====";
-  msg += "\r\nChip ID: ";
+  msg += " ==== DEBUG LOG ====\r\n";
+  msg += "Chip ID: ";
   msg += ESP.getChipId();
   msg += "\r\nFree Heap: ";
   msg += ESP.getFreeHeap();
@@ -133,8 +133,4 @@ void Logger::getLog(String &msg) {
   }
 
   msg += " ==== END LOG ====\r\n";
-
-  if (enableSerial) {
-    Serial.print(msg);
-  }
 }
