@@ -80,14 +80,17 @@ static IPAddress isp_endpoints[] = {
 static at_replies::ATReplies atreplies;
 #endif
 
-static RSTM32Mode channels[] = {
-  R_OPEN,
-  R_OPEN,
-#ifdef FOUR_WAY_MODE
-  R_OPEN,
-  R_OPEN,
-#endif
-};
+template<std::size_t N> std::array<RSTM32Mode, N> constexpr make_array(RSTM32Mode val)
+{
+    std::array<RSTM32Mode, N> tempArray{};
+    for(RSTM32Mode &elem:tempArray)
+    {
+        elem = val;
+    }
+    return tempArray;
+}
+
+static auto channels = make_array<RELAY_NUMBER_OF_CHANNELS>(R_OPEN);
 
 static uint16_t settings_offset = 0;
 
@@ -157,7 +160,13 @@ size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t &
 
 void setup()  {
   Serial.begin(115200);
-  
+
+/*
+  // TODO: compile-time initialization possible
+  for (size_t i = RELAY_NUMBER_OF_CHANNELS; i --> 0;) {
+    channels[i] = R_OPEN;
+  }
+*/
   // TODO: align to 256-Byte programmable pages (FLASH_PAGE_SIZE)
   // e.g. map 1st block, if invalid map 2nd...16th block. If 16th block is to be invalidated, erase 4K page and start from 1st block.
   EEPROM.begin(FLASH_SECTOR_SIZE);
@@ -392,24 +401,24 @@ void loop() {
   }
   if (myLoopState == AFTER_SETUP) {
     // don't accept serial commands if some action is queued. We have enought time to react at next loop iteration.
-    static at_replies::MyATCommand at_previous = INVALID_EXPECTED_AT, at_current;
+    static at_replies::MyATCommand at_previous = at_replies::INVALID_EXPECTED_AT, at_current;
     // pretend to be an AT device here
     if (Serial.available()) {
       switch (at_current = atreplies.handle_nuvoTon_comms(logger)) {
-        case RESTORE: {
+        case at_replies::RESTORE: {
           myLoopState = RESTORE;
           //serial_response_next = F("OK");
         }
         break;
-        case RST: {
+        case at_replies::RST: {
           myLoopState = RESET;
             // pretend we reset (wait a bit then send the WiFi connected message)
             delay(10);
             Serial.println(F("WIFI CONNECTED\r\nWIFI GOT IP"));
         }
         break;
-        case CWMODE_1: {
-          if (at_previous != AT_CWMODE_1) {
+        case at_replies::CWMODE_1: {
+          if (at_previous != at_replies::CWMODE_1) {
             if (myWiFiState == STA_MODE) {
               logger.logNow("{'myWiFiMode': 'unexpected state'}");
             }
@@ -417,33 +426,33 @@ void loop() {
           }
         }
         break;
-        case CWMODE_2: {
-          if (at_previous != AT_CWMODE_2) {
+        case at_replies::CWMODE_2: {
+          if (at_previous != at_replies::CWMODE_2) {
             myWiFiState = AP_REQUESTED;
           }
         }
         break;
-        case CWSTARTSMART: {
+        case at_replies::CWSTARTSMART: {
           
         }
         break;
-        case CWSMARTSTART_1: {
+        case at_replies::CWSMARTSTART_1: {
           
         }
         break;
-        case CIPMUX_1: {
+        case at_replies::CIPMUX_1: {
           
         }
         break;
-        case CIPSERVER: {
+        case at_replies::CIPSERVER: {
           myWebState = WEB_REQUESTED;
         }
         break;
-        case CIPSTO: {
+        case at_replies::CIPSTO: {
           
         }
         break;
-        case INVALID_EXPECTED_AT: {
+        case at_replies::INVALID_EXPECTED_AT: {
           
         }
         break;

@@ -51,7 +51,7 @@ If enabled, remove not-that-often-used strings from RAM.
 
 #include <DNSServer.h>
 #include <WiFiManager.h>         // See https://github.com/tzapu/WiFiManager for documentation
-#include <strings_en.h>
+//#include <strings_en.h>
 
 // Default value
 #define DEFAULT_LOGIN "sxabc"        // AuthBasic credentials
@@ -59,7 +59,15 @@ If enabled, remove not-that-often-used strings from RAM.
 #define DEFAULT_STANDALONE_SSID "RemoteRelay"
 #define DEFAULT_STANDALONE_WPA_KEY "1234x5678"
 
-#define FOUR_WAY_MODE           // Enable channels 3 and 4 (comment out to disable)
+#define RELAY_NUMBER_OF_CHANNELS 4
+//deprecated: #define FOUR_WAY_MODE           // Enable channels 3 and 4 (comment out to disable)
+#ifndef RELAY_NUMBER_OF_CHANNELS
+  #ifdef FOUR_WAY_MODE
+    #define RELAY_NUMBER_OF_CHANNELS 4
+  #else
+    #define RELAY_NUMBER_OF_CHANNELS 2
+  #endif
+#endif
 
 //#define DISABLE NUVOTON_AT_REPLIES      // https://github.com/nagius/RemoteRelay/issues/4 (uncomment to disable feature)
 #ifndef DISABLE_NUVOTON_AT_REPLIES
