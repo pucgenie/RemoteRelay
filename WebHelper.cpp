@@ -239,30 +239,32 @@ return;
 return;
   }
 
-  RSTM32MODE requestedMode;
-  const String value = wifiManager.server->arg(0);
-  if (value.equalsIgnoreCase("on")) {
-    requestedMode = R_CLOSE;
-  } else if (value.equalsIgnoreCase("off")) {
-    requestedMode = R_OPEN;
-  } else {
-    // pucgenie: Could have used a format string instead, but look how much pre-parsing and pre-compiling I did manually. xP
-    String msg(); //RAII
-    /*static (... just put it on the stack using array-initializer) */ const char msgTail[] = ", 'expected': ['on', 'off']}";
-    const char msgHead[] = "{'invalid': ";
-    msg.reserve(sizeof(msgHead) + value.length() + sizeof(msgTail));
-    msg.concat(msgHead);
-    msg.concat(value);
-    msg.concat(msgTail);
-    wifiManager.server->send(400, CT_JSON, msg);
-return;
-  } 
+  {
+    RSTM32Mode requestedMode;
+    const String value = wifiManager.server->arg(0);
+    if (value.equalsIgnoreCase("on")) {
+      requestedMode = R_CLOSE;
+    } else if (value.equalsIgnoreCase("off")) {
+      requestedMode = R_OPEN;
+    } else {
+      // pucgenie: Could have used a format string instead, but look how much pre-parsing and pre-compiling I did manually. xP
+      String msg;
+      /*static (... just put it on the stack using array-initializer) */ const char msgTail[] = ", 'expected': ['on', 'off']}";
+      const char msgHead[] = "{'invalid': ";
+      msg.reserve(sizeof(msgHead) + value.length() + sizeof(msgTail));
+      msg.concat(msgHead);
+      msg.concat(value);
+      msg.concat(msgTail);
+      wifiManager.server->send(400, CT_JSON, msg);
+  return;
+    }
 
-  // Give some time to the watchdog
-  ESP.wdtFeed();
-  yield();
+    // Give some time to the watchdog
+    ESP.wdtFeed();
+    yield();
 
-  setChannel(channel, requestedMode);
+    setChannel(channel, requestedMode);
+  }
   // stack, no fragmentation
   handleGETSettings();
 }
