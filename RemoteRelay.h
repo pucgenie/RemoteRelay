@@ -53,11 +53,7 @@ If enabled, remove not-that-often-used strings from RAM.
 #include <WiFiManager.h>         // See https://github.com/tzapu/WiFiManager for documentation
 //#include <strings_en.h>
 
-// Default value
-#define DEFAULT_LOGIN "sxabc"        // AuthBasic credentials
-#define DEFAULT_PASSWORD "MtsssezPzg"
-#define DEFAULT_STANDALONE_SSID "RemoteRelay"
-#define DEFAULT_STANDALONE_WPA_KEY "1234x5678"
+#include "RemoteRelay_creds.h"
 
 #define RELAY_NUMBER_OF_CHANNELS 4
 //deprecated: #define FOUR_WAY_MODE           // Enable channels 3 and 4 (comment out to disable)
@@ -120,8 +116,11 @@ enum MyPingState {
   PING_TIMEOUT,
 };
 
-#define BUF_SIZE 384            // Used for string buffers
-extern char buffer[2][BUF_SIZE];             // Global char* to avoid multiple String concatenation which causes RAM fragmentation
+// Used for string buffers
+#define BUF_SIZE 384
+// TODO: Create a manager for retrieving and returning buffers?
+// Global char* to avoid multiple String concatenation which causes RAM fragmentation
+extern char buffer[2][BUF_SIZE];
 
 // Global variables
 //extern ESP8266WebServer server;

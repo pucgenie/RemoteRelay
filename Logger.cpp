@@ -2,7 +2,7 @@
  *
  * This file is part of the Remoterelay Arduino sketch.
  * Copyleft 2017 Nicolas Agius <nicolas.agius@lps-it.fr>
- * Copyleft 2022 Johannes Unger (just minor enhancements)
+ * Copyleft 2022-2024 Johannes Unger (just minor enhancements)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,12 +61,13 @@ void Logger::logNow(const char* const p_buffer) {
   // Add timestamp header
   uint32_t uptime = millis();
   // pucgenie: don't use F() here.
-  #define LOG_MILLIS_FORMAT "[%07d] "
+  const char LOG_MILLIS_FORMAT[] = "[%07d] ";
+  #define len_LOG_MILLIS_FORMAT sizeof(LOG_MILLIS_FORMAT)-1
   char * const ringlogline = ringlog[index];
   // pucgenie: I don't like \0
-  snprintf(ringlogline, sizeof LOG_MILLIS_FORMAT, LOG_MILLIS_FORMAT, uptime);
-  strncpy(ringlogline + (sizeof LOG_MILLIS_FORMAT - 1), p_buffer, BUF_LEN - (sizeof LOG_MILLIS_FORMAT - 1));
-  #undef  LOG_MILLIS_FORMAT
+  snprintf(ringlogline, len_LOG_MILLIS_FORMAT + 1, LOG_MILLIS_FORMAT, uptime);
+  strncpy(ringlogline + len_LOG_MILLIS_FORMAT, p_buffer, BUF_LEN - len_LOG_MILLIS_FORMAT);
+  #undef  len_LOG_MILLIS_FORMAT
   
   if (enableSerial) {
     Serial.println(ringlogline);
@@ -91,10 +92,12 @@ void Logger::getLog(String &msg) {
   // Get uptime
   char uptime[9];
   // pucgenie: microoptimization: Don't use F() here.
-  // TODO: Handle return code better.
-  if (snprintf(uptime, sizeof(uptime), "%08d", millis() / 1000) >= sizeof(uptime)) {
-    // can't use logger...
-    Serial.println(F("Time formatting broken. Continuing anyway..."));
+  {
+    int _printerror = snprintf(uptime, sizeof(uptime), "%08lu", millis() / 1000);
+    if (_printerror < 0 || ((unsigned int) _printerror >= sizeof(uptime))) {
+      // can't use logger...
+      Serial.println(F("Time formatting broken. Continuing anyway..."));
+    }
   }
 
   // pucgenie: Don't worry about a few wasted CPU cycles to do that everytime.
@@ -103,8 +106,8 @@ void Logger::getLog(String &msg) {
     Serial.println(F("Couldn't reserve String buffer. Continuing anyway..."));
   }
   // Generate header
-  msg += " ==== DEBUG LOG ====\r\n";
-  msg += "Chip ID: ";
+  msg += " ==== DEBUG LOG ====\r\n\
+Chip ID: ";
   msg += ESP.getChipId();
   msg += "\r\nFree Heap: ";
   msg += ESP.getFreeHeap();
