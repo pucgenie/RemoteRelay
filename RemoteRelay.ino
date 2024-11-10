@@ -143,7 +143,7 @@ void setChannel(const uint8_t channel, const RSTM32Mode mode) {
   }
 }
 
-size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t &bufSize) {
+size_t getJSONState(const uint8_t channel, char * const p_buffer, const size_t bufSize) {
   //Generate JSON 
   const size_t snstatus = ULTRALOWMEMORY_FUNC(p_buffer, bufSize, ULTRALOWMEMORY_STR(R"=="==({"channel":%.1i,"mode":"%.3s"}
 )=="==")
