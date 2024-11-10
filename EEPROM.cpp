@@ -141,11 +141,11 @@ void EEPROMClass::write(int const address, uint8_t const value) {
 }
 
 bool EEPROMClass::commit() {
-  if (!_size)
+  if (_size == 0)
     return false;
   if(!_dirty)
     return true;
-  if(!_data)
+  if(_data == nullptr)
     return false;
 
   if (
